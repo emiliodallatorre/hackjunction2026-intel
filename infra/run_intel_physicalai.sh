@@ -10,4 +10,4 @@ fi
 export RENDER_GID
 
 exec docker compose --project-directory "$repo_dir" \
-    -f "$infra_dir/docker-compose.yml" up -d
+    -f "$infra_dir/docker-compose.yml" up -d "$@"
