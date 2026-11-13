@@ -33,7 +33,9 @@ The article covers application setup through demonstration collection; policy tr
 From the repository root, start the service with:
 
 ```sh
-docker compose --project-directory . -f infra/docker-compose.yml up -d
+./infra/run_intel_physicalai.sh
 ```
+
+The launcher reads the numeric group ID of `/dev/dri/renderD128` on the Linux host. If the Intel GPU uses a different render device, export its numeric group ID as `RENDER_GID` before launching. Docker resolves group names inside the image, so the host's `render` group name may not be available there.
 
 Set `HF_TOKEN` in the root `.env` file when using Hugging Face Hub-backed policies.

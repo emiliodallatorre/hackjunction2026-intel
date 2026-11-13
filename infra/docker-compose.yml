@@ -19,7 +19,7 @@ services:
       - "${DIALOUT_GID:-dialout}"
       - "${PLUGDEV_GID:-plugdev}"
       - "${VIDEO_GID:-video}"
-      - "${RENDER_GID:-render}"
+      - "${RENDER_GID:?Set RENDER_GID to the numeric group ID of the host Intel GPU render device}"
     ipc: host
     privileged: true
     stop_grace_period: 60s
