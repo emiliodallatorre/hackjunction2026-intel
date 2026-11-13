@@ -1,0 +1,38 @@
+services:
+  physical-ai-studio:
+    image: ghcr.io/open-edge-platform/physical-ai-studio-xpu:main
+    container_name: physical-ai-studio
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    environment:
+      HOST: 0.0.0.0
+      PORT: "7860"
+      SYCL_CACHE_PERSISTENT: "1"
+      SYCL_CACHE_DIR: /app/storage/.sycl-cache
+      SYCL_UR_USE_LEVEL_ZERO_V2: "0"
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - physical-ai-studio-storage:/app/storage
+      - ${HOME}/.cache/huggingface/lerobot/calibration:/home/appuser/.cache/huggingface/lerobot/calibration:ro
+    group_add:
+      - "${DIALOUT_GID:-dialout}"
+      - "${PLUGDEV_GID:-plugdev}"
+      - "${VIDEO_GID:-video}"
+      - "${RENDER_GID:-render}"
+    ipc: host
+    privileged: true
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:7860/api/health')"
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  physical-ai-studio-storage:
