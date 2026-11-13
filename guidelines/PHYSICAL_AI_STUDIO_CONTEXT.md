@@ -28,13 +28,16 @@ The article covers application setup through demonstration collection; policy tr
 
 - The challenge's Intel Panther Lake laptop should use the XPU service in `infra/docker-compose.yml`.
 - The Compose service grants the container privileged access to host devices, following the upstream Studio setup. Run it on the Linux laptop connected to the robot and cameras; Docker Desktop on macOS cannot expose that host's Intel XPU and USB hardware to the container.
-- The default image is published at `ghcr.io/open-edge-platform/physical-ai-studio-xpu:main`. The upstream Studio repository documents CPU, XPU, and CUDA variants.
+- Compose builds the XPU image from the upstream `junction2026` branch, pinned to commit `285924d9381238d3ef2478294c2b85a0eb6ac62b`. Update both build context references together when moving to a newer branch commit.
+- The existing `physical-ai-studio-storage` volume and calibration mount are unchanged. Back up the volume before switching versions: the branch may migrate application data, and compatibility with the previous image has not been verified.
 
-From the repository root, start the service with:
+From the repository root, build and start the service on the Intel machine with:
 
 ```sh
 ./infra/run_intel_physicalai.sh
 ```
+
+The image is built from source on startup; the first build may take a while. Subsequent builds can reuse Docker's cache.
 
 The launcher reads the numeric group ID of `/dev/dri/renderD128` on the Linux host. If the Intel GPU uses a different render device, export its numeric group ID as `RENDER_GID` before launching. Docker resolves group names inside the image, so the host's `render` group name may not be available there.
 

@@ -1,6 +1,13 @@
 services:
   physical-ai-studio:
-    image: ghcr.io/open-edge-platform/physical-ai-studio-xpu:main
+    image: physical-ai-studio-xpu:junction2026
+    pull_policy: build
+    build:
+      context: https://github.com/open-edge-platform/physical-ai-studio.git#285924d9381238d3ef2478294c2b85a0eb6ac62b
+      dockerfile: application/docker/Dockerfile
+      target: physical-ai-studio-xpu
+      additional_contexts:
+        libs: https://github.com/open-edge-platform/physical-ai-studio.git#285924d9381238d3ef2478294c2b85a0eb6ac62b:library
     container_name: physical-ai-studio
     restart: unless-stopped
     ports:
