@@ -1,0 +1,17 @@
+[project]
+name = "hackjunction2026-intel"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Emilio Dalla Torre", email = "info@emiliodallatorre.it" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+hackjunction2026-intel = "hackjunction2026_intel:main"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
