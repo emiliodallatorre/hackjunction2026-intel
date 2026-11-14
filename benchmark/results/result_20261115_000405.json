@@ -1,0 +1,1166 @@
+{
+  "environment": {
+    "timestamp": "2026-11-14T15:04:13-0800",
+    "hostname": "intel-HP-OmniBook-Ultra-Laptop-14t-kd000",
+    "kernel": "7.0.0-38-generic",
+    "cpu_model": "Intel(R) Core(TM) Ultra X9 388H",
+    "cpu_count": 16,
+    "openvino_version": "2026.4.1-22982-e213a147257-releases/2026/4",
+    "numpy_version": "2.4.6",
+    "opencv_version": "5.0.0",
+    "python": "3.13.18",
+    "ov_available_devices": [
+      "CPU",
+      "GPU",
+      "NPU"
+    ],
+    "requested_devices": [
+      "CPU",
+      "GPU",
+      "NPU"
+    ],
+    "cpu_governor": "powersave",
+    "energy_perf_pref": "performance",
+    "ac_online": true,
+    "battery_status": "Full",
+    "running_as_root": true,
+    "model_dir": "/home/intel/Desktop/hackjunction/hackjunction2026-intel/anomaly_detection/models/patchcore",
+    "iters": 300,
+    "warmup": 50,
+    "sustain_s": 100
+  },
+  "sensors": {
+    "energy_source": "rapl",
+    "energy_valid": true,
+    "rapl_readable": [
+      "package-0@intel-rapl:0",
+      "core@intel-rapl:0:0",
+      "uncore@intel-rapl:0:1",
+      "dram@intel-rapl:0:2",
+      "psys@intel-rapl:1"
+    ],
+    "rapl_root_only": 0,
+    "primary_temp": "coretemp/Package id 0",
+    "temp_count": 21
+  },
+  "devices": {
+    "CPU": {
+      "cold_start": {
+        "cold_cache": {
+          "read_ms": 5.1447639998514205,
+          "compile_ms": 657.4874449943309,
+          "first_infer_ms": 172.58914400008507,
+          "total_ms": 835.2213529942674
+        },
+        "warm_cache": {
+          "read_ms": 3.3365220006089658,
+          "compile_ms": 106.05624000163516,
+          "first_infer_ms": 115.83802400127752,
+          "total_ms": 225.23078600352164
+        },
+        "no_cache": {
+          "read_ms": 3.2200770001509227,
+          "compile_ms": 530.970788000559,
+          "first_infer_ms": 133.17961099528475,
+          "total_ms": 667.3704759959946
+        }
+      },
+      "inference_precision": "<Type: 'float32'>",
+      "execution_devices": [
+        "CPU"
+      ],
+      "steady_state": {
+        "latency": {
+          "n": 300,
+          "min_ms": 99.6567190013593,
+          "p50_ms": 109.9722719991405,
+          "p90_ms": 123.13663350432762,
+          "p95_ms": 127.21023910307851,
+          "p99_ms": 154.9128661415306,
+          "max_ms": 188.36544000077993,
+          "mean_ms": 112.89459802343724,
+          "stdev_ms": 10.995606438446847,
+          "wall_s": 33.869,
+          "throughput_fps": 8.857766548986923,
+          "energy": {
+            "energy_j": 1314.93,
+            "avg_watts": 38.82,
+            "mj_per_inference": 4383.1,
+            "source": "rapl-package"
+          },
+          "marginal_watts": 34.78,
+          "marginal_mj_per_inference": 3926.6
+        },
+        "sampler": {
+          "elapsed_s": 33.869,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 75.0,
+          "temp_mean_c": 87.9,
+          "temp_max_c": 97.0,
+          "temp_end_c": 88.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 1314.93,
+            "core@intel-rapl:0:0": 1167.24,
+            "uncore@intel-rapl:0:1": 1.36,
+            "dram@intel-rapl:0:2": 40.0,
+            "psys@intel-rapl:1": 1902.22
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 38.82,
+            "core@intel-rapl:0:0": 34.46,
+            "uncore@intel-rapl:0:1": 0.04,
+            "dram@intel-rapl:0:2": 1.18,
+            "psys@intel-rapl:1": 56.16
+          },
+          "battery_watts_mean": 4.27,
+          "battery_watts_max": 5.92,
+          "battery_joules": 144.44
+        }
+      },
+      "throughput": {
+        "stats": {
+          "n": 300,
+          "wall_s": 30.88,
+          "throughput_fps": 9.71491100966686,
+          "n_requests": 4,
+          "energy": {
+            "energy_j": 919.59,
+            "avg_watts": 29.78,
+            "mj_per_inference": 3065.3,
+            "source": "rapl-package"
+          }
+        },
+        "sampler": {
+          "elapsed_s": 30.881,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 85.0,
+          "temp_mean_c": 80.5,
+          "temp_max_c": 85.0,
+          "temp_end_c": 79.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 919.59,
+            "core@intel-rapl:0:0": 772.94,
+            "uncore@intel-rapl:0:1": 4.0,
+            "dram@intel-rapl:0:2": 39.41,
+            "psys@intel-rapl:1": 1455.65
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 29.78,
+            "core@intel-rapl:0:0": 25.03,
+            "uncore@intel-rapl:0:1": 0.13,
+            "dram@intel-rapl:0:2": 1.28,
+            "psys@intel-rapl:1": 47.14
+          },
+          "battery_watts_mean": 2.71,
+          "battery_watts_max": 2.71,
+          "battery_joules": 2.74
+        }
+      },
+      "end_to_end": {
+        "stats": {
+          "n": 300,
+          "min_ms": 105.1545590016758,
+          "p50_ms": 126.03552850123378,
+          "p90_ms": 148.5048497946991,
+          "p95_ms": 152.67208609548106,
+          "p99_ms": 163.57329464030045,
+          "max_ms": 184.93775199749507,
+          "mean_ms": 129.66242738652605,
+          "stdev_ms": 13.81003927851711,
+          "throughput_fps": 7.712291201859217,
+          "preprocess_overhead_ms": 16.06,
+          "presence_only_p50_ms": 1.33
+        },
+        "sampler": {
+          "elapsed_s": 38.899,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 75.0,
+          "temp_mean_c": 81.8,
+          "temp_max_c": 86.0,
+          "temp_end_c": 83.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 1162.12,
+            "core@intel-rapl:0:0": 990.17,
+            "uncore@intel-rapl:0:1": 2.18,
+            "dram@intel-rapl:0:2": 45.34,
+            "psys@intel-rapl:1": 1844.65
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 29.87,
+            "core@intel-rapl:0:0": 25.45,
+            "uncore@intel-rapl:0:1": 0.06,
+            "dram@intel-rapl:0:2": 1.17,
+            "psys@intel-rapl:1": 47.42
+          },
+          "battery_watts_mean": 2.28,
+          "battery_watts_max": 11.16,
+          "battery_joules": 88.55
+        }
+      },
+      "sustained": {
+        "stats": {
+          "wall_s": 100.0,
+          "total_inferences": 797,
+          "buckets": [
+            {
+              "t_s": 10.1,
+              "n": 80,
+              "fps": 7.924480259424676,
+              "p50_ms": 118.85595800049487,
+              "p99_ms": 217.93004399660276,
+              "temp_c": 81.0
+            },
+            {
+              "t_s": 20.1,
+              "n": 71,
+              "fps": 7.0754374497936405,
+              "p50_ms": 139.4862050001393,
+              "p99_ms": 196.93216599989682,
+              "temp_c": 81.0
+            },
+            {
+              "t_s": 30.2,
+              "n": 81,
+              "fps": 8.04379560147294,
+              "p50_ms": 118.81068799993955,
+              "p99_ms": 150.99615399958566,
+              "temp_c": 86.0
+            },
+            {
+              "t_s": 40.3,
+              "n": 82,
+              "fps": 8.133917969756935,
+              "p50_ms": 119.06284649739973,
+              "p99_ms": 151.36056700430345,
+              "temp_c": 85.0
+            },
+            {
+              "t_s": 50.3,
+              "n": 81,
+              "fps": 8.080855735990143,
+              "p50_ms": 119.79093399713747,
+              "p99_ms": 149.87702300277306,
+              "temp_c": 84.0
+            },
+            {
+              "t_s": 60.4,
+              "n": 82,
+              "fps": 8.161148725806928,
+              "p50_ms": 119.35802600055467,
+              "p99_ms": 154.67556100338697,
+              "temp_c": 84.0
+            },
+            {
+              "t_s": 70.4,
+              "n": 82,
+              "fps": 8.150586096164872,
+              "p50_ms": 118.52071300017997,
+              "p99_ms": 148.4597250018851,
+              "temp_c": 83.0
+            },
+            {
+              "t_s": 80.5,
+              "n": 81,
+              "fps": 7.998290197012236,
+              "p50_ms": 121.97940300393384,
+              "p99_ms": 155.39056099805748,
+              "temp_c": 85.0
+            },
+            {
+              "t_s": 90.6,
+              "n": 81,
+              "fps": 8.04614798843051,
+              "p50_ms": 118.75099900498753,
+              "p99_ms": 151.96277799987,
+              "temp_c": 84.0
+            }
+          ],
+          "first_fps": 7.924480259424676,
+          "last_fps": 8.04614798843051,
+          "throughput_drop_pct": -1.5353401740276107,
+          "energy": {
+            "energy_j": 2994.35,
+            "avg_watts": 29.94,
+            "mj_per_inference": 3757.0,
+            "source": "rapl-package"
+          }
+        },
+        "sampler": {
+          "elapsed_s": 100.024,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 83.0,
+          "temp_mean_c": 82.9,
+          "temp_max_c": 87.0,
+          "temp_end_c": 82.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 2994.35,
+            "core@intel-rapl:0:0": 2580.97,
+            "uncore@intel-rapl:0:1": 7.19,
+            "dram@intel-rapl:0:2": 116.27,
+            "psys@intel-rapl:1": 4701.15
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 29.94,
+            "core@intel-rapl:0:0": 25.8,
+            "uncore@intel-rapl:0:1": 0.07,
+            "dram@intel-rapl:0:2": 1.16,
+            "psys@intel-rapl:1": 47.0
+          },
+          "battery_watts_mean": 1.91,
+          "battery_watts_max": 10.98,
+          "battery_joules": 182.88
+        }
+      }
+    },
+    "GPU": {
+      "cold_start": {
+        "cold_cache": {
+          "read_ms": 4.223105002893135,
+          "compile_ms": 1483.7976880007773,
+          "first_infer_ms": 99.88046900252812,
+          "total_ms": 1587.9012620061985
+        },
+        "warm_cache": {
+          "read_ms": 3.556798998033628,
+          "compile_ms": 149.29075999680208,
+          "first_infer_ms": 108.37623800034635,
+          "total_ms": 261.22379699518206
+        },
+        "no_cache": {
+          "read_ms": 3.6659540055552498,
+          "compile_ms": 236.43324200384086,
+          "first_infer_ms": 78.57573599903844,
+          "total_ms": 318.67493200843455
+        }
+      },
+      "inference_precision": "<Type: 'float16'>",
+      "execution_devices": [
+        "GPU.0"
+      ],
+      "steady_state": {
+        "latency": {
+          "n": 300,
+          "min_ms": 51.99131400149781,
+          "p50_ms": 54.27584949575248,
+          "p90_ms": 60.005534398806056,
+          "p95_ms": 64.46650734651485,
+          "p99_ms": 72.06326340863598,
+          "max_ms": 76.75878699956229,
+          "mean_ms": 55.54600565660318,
+          "stdev_ms": 4.036140446733058,
+          "wall_s": 16.664,
+          "throughput_fps": 18.00301082064544,
+          "energy": {
+            "energy_j": 513.24,
+            "avg_watts": 30.8,
+            "mj_per_inference": 1710.8,
+            "source": "rapl-package"
+          },
+          "marginal_watts": 26.76,
+          "marginal_mj_per_inference": 1486.4
+        },
+        "sampler": {
+          "elapsed_s": 16.664,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 77.0,
+          "temp_mean_c": 75.4,
+          "temp_max_c": 78.0,
+          "temp_end_c": 75.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 513.24,
+            "core@intel-rapl:0:0": 55.9,
+            "uncore@intel-rapl:0:1": 393.32,
+            "dram@intel-rapl:0:2": 19.47,
+            "psys@intel-rapl:1": 775.35
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 30.8,
+            "core@intel-rapl:0:0": 3.35,
+            "uncore@intel-rapl:0:1": 23.6,
+            "dram@intel-rapl:0:2": 1.17,
+            "psys@intel-rapl:1": 46.53
+          },
+          "battery_watts_mean": 4.57,
+          "battery_watts_max": 12.86,
+          "battery_joules": 75.56
+        }
+      },
+      "throughput": {
+        "stats": {
+          "n": 300,
+          "wall_s": 17.61,
+          "throughput_fps": 17.036224871531317,
+          "n_requests": 4,
+          "energy": {
+            "energy_j": 525.93,
+            "avg_watts": 29.87,
+            "mj_per_inference": 1753.1,
+            "source": "rapl-package"
+          }
+        },
+        "sampler": {
+          "elapsed_s": 17.61,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 74.0,
+          "temp_mean_c": 74.6,
+          "temp_max_c": 75.0,
+          "temp_end_c": 75.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 525.93,
+            "core@intel-rapl:0:0": 74.35,
+            "uncore@intel-rapl:0:1": 385.74,
+            "dram@intel-rapl:0:2": 19.14,
+            "psys@intel-rapl:1": 806.51
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 29.87,
+            "core@intel-rapl:0:0": 4.22,
+            "uncore@intel-rapl:0:1": 21.9,
+            "dram@intel-rapl:0:2": 1.09,
+            "psys@intel-rapl:1": 45.8
+          },
+          "battery_watts_mean": 6.61,
+          "battery_watts_max": 12.34,
+          "battery_joules": 116.56
+        }
+      },
+      "end_to_end": {
+        "stats": {
+          "n": 300,
+          "min_ms": 90.48797300056322,
+          "p50_ms": 91.50614099780796,
+          "p90_ms": 93.72420250001596,
+          "p95_ms": 95.2197367521876,
+          "p99_ms": 98.50400850424194,
+          "max_ms": 101.07578400493367,
+          "mean_ms": 91.96535873001267,
+          "stdev_ms": 1.5220745370286048,
+          "throughput_fps": 10.873625577710776,
+          "preprocess_overhead_ms": 37.23,
+          "presence_only_p50_ms": 1.029
+        },
+        "sampler": {
+          "elapsed_s": 27.59,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 76.0,
+          "temp_mean_c": 76.6,
+          "temp_max_c": 77.0,
+          "temp_end_c": 77.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 823.7,
+            "core@intel-rapl:0:0": 77.32,
+            "uncore@intel-rapl:0:1": 650.98,
+            "dram@intel-rapl:0:2": 29.92,
+            "psys@intel-rapl:1": 1253.81
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 29.85,
+            "core@intel-rapl:0:0": 2.8,
+            "uncore@intel-rapl:0:1": 23.59,
+            "dram@intel-rapl:0:2": 1.08,
+            "psys@intel-rapl:1": 45.44
+          },
+          "battery_watts_mean": 6.25,
+          "battery_watts_max": 12.19,
+          "battery_joules": 172.23
+        }
+      },
+      "sustained": {
+        "stats": {
+          "wall_s": 100.0,
+          "total_inferences": 1776,
+          "buckets": [
+            {
+              "t_s": 10.0,
+              "n": 185,
+              "fps": 18.431703064255316,
+              "p50_ms": 53.96409099921584,
+              "p99_ms": 64.21947399940109,
+              "temp_c": 77.0
+            },
+            {
+              "t_s": 20.1,
+              "n": 185,
+              "fps": 18.440692817744736,
+              "p50_ms": 54.026587000407744,
+              "p99_ms": 61.95314200158464,
+              "temp_c": 77.0
+            },
+            {
+              "t_s": 30.1,
+              "n": 185,
+              "fps": 18.401135150241085,
+              "p50_ms": 54.08285099838395,
+              "p99_ms": 58.64904500049306,
+              "temp_c": 77.0
+            },
+            {
+              "t_s": 40.1,
+              "n": 184,
+              "fps": 18.35590657561949,
+              "p50_ms": 54.19740700017428,
+              "p99_ms": 61.87012400187086,
+              "temp_c": 76.0
+            },
+            {
+              "t_s": 50.2,
+              "n": 184,
+              "fps": 18.3866500987359,
+              "p50_ms": 54.14447400107747,
+              "p99_ms": 59.25907799974084,
+              "temp_c": 77.0
+            },
+            {
+              "t_s": 60.2,
+              "n": 177,
+              "fps": 17.625825437985775,
+              "p50_ms": 57.164004996593576,
+              "p99_ms": 65.20197699865093,
+              "temp_c": 85.0
+            },
+            {
+              "t_s": 70.2,
+              "n": 172,
+              "fps": 17.157703411199186,
+              "p50_ms": 58.08813499970711,
+              "p99_ms": 63.16985899320571,
+              "temp_c": 85.0
+            },
+            {
+              "t_s": 80.2,
+              "n": 179,
+              "fps": 17.891467476863436,
+              "p50_ms": 55.05641200579703,
+              "p99_ms": 62.25862599967513,
+              "temp_c": 77.0
+            },
+            {
+              "t_s": 90.2,
+              "n": 176,
+              "fps": 17.574999205109517,
+              "p50_ms": 54.975253999145934,
+              "p99_ms": 94.19275599793764,
+              "temp_c": 75.0
+            }
+          ],
+          "first_fps": 18.431703064255316,
+          "last_fps": 17.574999205109517,
+          "throughput_drop_pct": 4.64799078066318,
+          "energy": {
+            "energy_j": 2997.9,
+            "avg_watts": 29.97,
+            "mj_per_inference": 1688.0,
+            "source": "rapl-package"
+          }
+        },
+        "sampler": {
+          "elapsed_s": 100.033,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 77.0,
+          "temp_mean_c": 77.9,
+          "temp_max_c": 85.0,
+          "temp_end_c": 74.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 2997.9,
+            "core@intel-rapl:0:0": 395.36,
+            "uncore@intel-rapl:0:1": 2223.19,
+            "dram@intel-rapl:0:2": 111.76,
+            "psys@intel-rapl:1": 4609.61
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 29.97,
+            "core@intel-rapl:0:0": 3.95,
+            "uncore@intel-rapl:0:1": 22.22,
+            "dram@intel-rapl:0:2": 1.12,
+            "psys@intel-rapl:1": 46.08
+          },
+          "battery_watts_mean": 6.67,
+          "battery_watts_max": 12.8,
+          "battery_joules": 666.12
+        }
+      }
+    },
+    "NPU": {
+      "cold_start": {
+        "cold_cache": {
+          "read_ms": 5.13065999984974,
+          "compile_ms": 17089.043993000814,
+          "first_infer_ms": 373.66979599755723,
+          "total_ms": 17467.84444899822
+        },
+        "warm_cache": {
+          "read_ms": 4.394857001898345,
+          "compile_ms": 40.079827995214146,
+          "first_infer_ms": 397.0494639943354,
+          "total_ms": 441.5241489914479
+        },
+        "no_cache": {
+          "read_ms": 4.147521998675074,
+          "compile_ms": 17316.11378800153,
+          "first_infer_ms": 367.5895380001748,
+          "total_ms": 17687.85084800038
+        }
+      },
+      "inference_precision": "unknown",
+      "execution_devices": [
+        "NPU"
+      ],
+      "steady_state": {
+        "latency": {
+          "n": 300,
+          "min_ms": 181.439339001372,
+          "p50_ms": 182.3457270002109,
+          "p90_ms": 182.77448550288682,
+          "p95_ms": 183.06869274711062,
+          "p99_ms": 185.38936492215726,
+          "max_ms": 191.4829879970057,
+          "mean_ms": 182.4496981267051,
+          "stdev_ms": 0.7510461629842173,
+          "wall_s": 54.735,
+          "throughput_fps": 5.480934738639812,
+          "energy": {
+            "energy_j": 760.52,
+            "avg_watts": 13.89,
+            "mj_per_inference": 2535.1,
+            "source": "rapl-package"
+          },
+          "marginal_watts": 9.85,
+          "marginal_mj_per_inference": 1797.2
+        },
+        "sampler": {
+          "elapsed_s": 54.736,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 72.0,
+          "temp_mean_c": 67.2,
+          "temp_max_c": 87.0,
+          "temp_end_c": 62.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 760.52,
+            "core@intel-rapl:0:0": 355.65,
+            "uncore@intel-rapl:0:1": 3.25,
+            "dram@intel-rapl:0:2": 57.65,
+            "psys@intel-rapl:1": 1705.42
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 13.89,
+            "core@intel-rapl:0:0": 6.5,
+            "uncore@intel-rapl:0:1": 0.06,
+            "dram@intel-rapl:0:2": 1.05,
+            "psys@intel-rapl:1": 31.16
+          },
+          "battery_watts_mean": 1.49,
+          "battery_watts_max": 4.72,
+          "battery_joules": 18.62
+        }
+      },
+      "throughput": {
+        "stats": {
+          "n": 300,
+          "wall_s": 54.402,
+          "throughput_fps": 5.514456210279286,
+          "n_requests": 8,
+          "energy": {
+            "energy_j": 778.84,
+            "avg_watts": 14.32,
+            "mj_per_inference": 2596.1,
+            "source": "rapl-package"
+          }
+        },
+        "sampler": {
+          "elapsed_s": 54.403,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 69.0,
+          "temp_mean_c": 68.9,
+          "temp_max_c": 95.0,
+          "temp_end_c": 54.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 778.84,
+            "core@intel-rapl:0:0": 349.69,
+            "uncore@intel-rapl:0:1": 18.72,
+            "dram@intel-rapl:0:2": 60.29,
+            "psys@intel-rapl:1": 1654.52
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 14.32,
+            "core@intel-rapl:0:0": 6.43,
+            "uncore@intel-rapl:0:1": 0.34,
+            "dram@intel-rapl:0:2": 1.11,
+            "psys@intel-rapl:1": 30.41
+          },
+          "battery_watts_mean": 2.16,
+          "battery_watts_max": 7.79,
+          "battery_joules": 84.09
+        }
+      },
+      "end_to_end": {
+        "stats": {
+          "n": 300,
+          "min_ms": 183.14039899996715,
+          "p50_ms": 184.83917699632002,
+          "p90_ms": 185.42971940187272,
+          "p95_ms": 185.86352665079175,
+          "p99_ms": 188.36641465648427,
+          "max_ms": 189.12739100051112,
+          "mean_ms": 184.90878622307113,
+          "stdev_ms": 0.7664475255834683,
+          "throughput_fps": 5.408043946294847,
+          "preprocess_overhead_ms": 2.49,
+          "presence_only_p50_ms": 0.955
+        },
+        "sampler": {
+          "elapsed_s": 55.474,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 71.0,
+          "temp_mean_c": 65.8,
+          "temp_max_c": 76.0,
+          "temp_end_c": 67.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 829.56,
+            "core@intel-rapl:0:0": 397.33,
+            "uncore@intel-rapl:0:1": 28.07,
+            "dram@intel-rapl:0:2": 58.98,
+            "psys@intel-rapl:1": 1768.14
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 14.95,
+            "core@intel-rapl:0:0": 7.16,
+            "uncore@intel-rapl:0:1": 0.51,
+            "dram@intel-rapl:0:2": 1.06,
+            "psys@intel-rapl:1": 31.87
+          },
+          "battery_watts_mean": 1.46,
+          "battery_watts_max": 6.33,
+          "battery_joules": 76.45
+        }
+      },
+      "sustained": {
+        "stats": {
+          "wall_s": 100.1,
+          "total_inferences": 546,
+          "buckets": [
+            {
+              "t_s": 10.1,
+              "n": 55,
+              "fps": 5.4410884495476655,
+              "p50_ms": 182.29783300193958,
+              "p99_ms": 259.3185270015965,
+              "temp_c": 62.0
+            },
+            {
+              "t_s": 20.1,
+              "n": 55,
+              "fps": 5.480862423348185,
+              "p50_ms": 182.23360300180502,
+              "p99_ms": 188.09050600248156,
+              "temp_c": 58.0
+            },
+            {
+              "t_s": 30.2,
+              "n": 55,
+              "fps": 5.483256837959608,
+              "p50_ms": 182.31630400259746,
+              "p99_ms": 183.50284799817018,
+              "temp_c": 59.0
+            },
+            {
+              "t_s": 40.3,
+              "n": 55,
+              "fps": 5.449502518964127,
+              "p50_ms": 183.51810699823545,
+              "p99_ms": 184.34965799679048,
+              "temp_c": 52.0
+            },
+            {
+              "t_s": 50.4,
+              "n": 55,
+              "fps": 5.450621635818437,
+              "p50_ms": 183.34816100104945,
+              "p99_ms": 185.13574299868196,
+              "temp_c": 53.0
+            },
+            {
+              "t_s": 60.5,
+              "n": 55,
+              "fps": 5.44333145972055,
+              "p50_ms": 183.77095599862514,
+              "p99_ms": 184.90978000045288,
+              "temp_c": 49.0
+            },
+            {
+              "t_s": 70.6,
+              "n": 55,
+              "fps": 5.448876670939951,
+              "p50_ms": 183.49687600129982,
+              "p99_ms": 184.6215929981554,
+              "temp_c": 49.0
+            },
+            {
+              "t_s": 80.6,
+              "n": 55,
+              "fps": 5.451818975726691,
+              "p50_ms": 183.46497700258624,
+              "p99_ms": 184.59046600037254,
+              "temp_c": 53.0
+            },
+            {
+              "t_s": 90.7,
+              "n": 55,
+              "fps": 5.448667569405395,
+              "p50_ms": 183.45126399799483,
+              "p99_ms": 184.87061900668778,
+              "temp_c": 49.0
+            }
+          ],
+          "first_fps": 5.4410884495476655,
+          "last_fps": 5.448667569405395,
+          "throughput_drop_pct": -0.13929418586018372,
+          "energy": {
+            "energy_j": 850.56,
+            "avg_watts": 8.5,
+            "mj_per_inference": 1557.8,
+            "source": "rapl-package"
+          }
+        },
+        "sampler": {
+          "elapsed_s": 100.103,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 67.0,
+          "temp_mean_c": 55.4,
+          "temp_max_c": 76.0,
+          "temp_end_c": 52.0,
+          "rapl_joules": {
+            "package-0@intel-rapl:0": 850.56,
+            "core@intel-rapl:0:0": 251.62,
+            "uncore@intel-rapl:0:1": 9.75,
+            "dram@intel-rapl:0:2": 68.97,
+            "psys@intel-rapl:1": 2126.39
+          },
+          "rapl_watts": {
+            "package-0@intel-rapl:0": 8.5,
+            "core@intel-rapl:0:0": 2.51,
+            "uncore@intel-rapl:0:1": 0.1,
+            "dram@intel-rapl:0:2": 0.69,
+            "psys@intel-rapl:1": 21.24
+          },
+          "battery_watts_mean": 1.77,
+          "battery_watts_max": 6.42,
+          "battery_joules": 34.54
+        }
+      }
+    }
+  },
+  "idle": {
+    "idle_watts": 4.039532015599479,
+    "idle_temp_mean_c": 45.9,
+    "sampler": {
+      "elapsed_s": 30.001,
+      "temp_sensor": "coretemp/Package id 0",
+      "temp_start_c": 58.0,
+      "temp_mean_c": 45.9,
+      "temp_max_c": 72.0,
+      "temp_end_c": 43.0,
+      "rapl_joules": {
+        "package-0@intel-rapl:0": 121.19,
+        "core@intel-rapl:0:0": 79.64,
+        "uncore@intel-rapl:0:1": 1.72,
+        "dram@intel-rapl:0:2": 10.16,
+        "psys@intel-rapl:1": 307.41
+      },
+      "rapl_watts": {
+        "package-0@intel-rapl:0": 4.04,
+        "core@intel-rapl:0:0": 2.65,
+        "uncore@intel-rapl:0:1": 0.06,
+        "dram@intel-rapl:0:2": 0.34,
+        "psys@intel-rapl:1": 10.25
+      },
+      "battery_watts_mean": 0.98,
+      "battery_watts_max": 1.63,
+      "battery_joules": 2.87
+    }
+  },
+  "memory": {
+    "peak_rss_mb": 2531.9,
+    "current_rss_mb": 973.9,
+    "model_bin_mb": 208.9
+  },
+  "camera": {
+    "skipped": true
+  },
+  "summary_rows": [
+    {
+      "device": "CPU",
+      "precision": "<Type: 'float32'>",
+      "execution_devices": "CPU",
+      "p50_ms": 109.97,
+      "p95_ms": 127.21,
+      "p99_ms": 154.91,
+      "seq_fps": 8.86,
+      "peak_fps": 9.71,
+      "compile_cold_ms": 657.5,
+      "compile_warm_ms": 106.1,
+      "first_infer_ms": 172.6,
+      "mj_per_inference": 4383.1,
+      "sustained_drop_pct": -1.5,
+      "peak_temp_c": 97.0,
+      "e2e_p50_ms": 126.04
+    },
+    {
+      "device": "GPU",
+      "precision": "<Type: 'float16'>",
+      "execution_devices": "GPU.0",
+      "p50_ms": 54.28,
+      "p95_ms": 64.47,
+      "p99_ms": 72.06,
+      "seq_fps": 18.0,
+      "peak_fps": 17.04,
+      "compile_cold_ms": 1483.8,
+      "compile_warm_ms": 149.3,
+      "first_infer_ms": 99.9,
+      "mj_per_inference": 1710.8,
+      "sustained_drop_pct": 4.6,
+      "peak_temp_c": 78.0,
+      "e2e_p50_ms": 91.51
+    },
+    {
+      "device": "NPU",
+      "precision": "unknown",
+      "execution_devices": "NPU",
+      "p50_ms": 182.35,
+      "p95_ms": 183.07,
+      "p99_ms": 185.39,
+      "seq_fps": 5.48,
+      "peak_fps": 5.51,
+      "compile_cold_ms": 17089.0,
+      "compile_warm_ms": 40.1,
+      "first_infer_ms": 373.7,
+      "mj_per_inference": 2535.1,
+      "sustained_drop_pct": -0.1,
+      "peak_temp_c": 87.0,
+      "e2e_p50_ms": 184.84
+    }
+  ],
+  "sustained_buckets_index": {
+    "CPU": [
+      {
+        "t_s": 10.1,
+        "n": 80,
+        "fps": 7.924480259424676,
+        "p50_ms": 118.85595800049487,
+        "p99_ms": 217.93004399660276,
+        "temp_c": 81.0
+      },
+      {
+        "t_s": 20.1,
+        "n": 71,
+        "fps": 7.0754374497936405,
+        "p50_ms": 139.4862050001393,
+        "p99_ms": 196.93216599989682,
+        "temp_c": 81.0
+      },
+      {
+        "t_s": 30.2,
+        "n": 81,
+        "fps": 8.04379560147294,
+        "p50_ms": 118.81068799993955,
+        "p99_ms": 150.99615399958566,
+        "temp_c": 86.0
+      },
+      {
+        "t_s": 40.3,
+        "n": 82,
+        "fps": 8.133917969756935,
+        "p50_ms": 119.06284649739973,
+        "p99_ms": 151.36056700430345,
+        "temp_c": 85.0
+      },
+      {
+        "t_s": 50.3,
+        "n": 81,
+        "fps": 8.080855735990143,
+        "p50_ms": 119.79093399713747,
+        "p99_ms": 149.87702300277306,
+        "temp_c": 84.0
+      },
+      {
+        "t_s": 60.4,
+        "n": 82,
+        "fps": 8.161148725806928,
+        "p50_ms": 119.35802600055467,
+        "p99_ms": 154.67556100338697,
+        "temp_c": 84.0
+      },
+      {
+        "t_s": 70.4,
+        "n": 82,
+        "fps": 8.150586096164872,
+        "p50_ms": 118.52071300017997,
+        "p99_ms": 148.4597250018851,
+        "temp_c": 83.0
+      },
+      {
+        "t_s": 80.5,
+        "n": 81,
+        "fps": 7.998290197012236,
+        "p50_ms": 121.97940300393384,
+        "p99_ms": 155.39056099805748,
+        "temp_c": 85.0
+      },
+      {
+        "t_s": 90.6,
+        "n": 81,
+        "fps": 8.04614798843051,
+        "p50_ms": 118.75099900498753,
+        "p99_ms": 151.96277799987,
+        "temp_c": 84.0
+      }
+    ],
+    "GPU": [
+      {
+        "t_s": 10.0,
+        "n": 185,
+        "fps": 18.431703064255316,
+        "p50_ms": 53.96409099921584,
+        "p99_ms": 64.21947399940109,
+        "temp_c": 77.0
+      },
+      {
+        "t_s": 20.1,
+        "n": 185,
+        "fps": 18.440692817744736,
+        "p50_ms": 54.026587000407744,
+        "p99_ms": 61.95314200158464,
+        "temp_c": 77.0
+      },
+      {
+        "t_s": 30.1,
+        "n": 185,
+        "fps": 18.401135150241085,
+        "p50_ms": 54.08285099838395,
+        "p99_ms": 58.64904500049306,
+        "temp_c": 77.0
+      },
+      {
+        "t_s": 40.1,
+        "n": 184,
+        "fps": 18.35590657561949,
+        "p50_ms": 54.19740700017428,
+        "p99_ms": 61.87012400187086,
+        "temp_c": 76.0
+      },
+      {
+        "t_s": 50.2,
+        "n": 184,
+        "fps": 18.3866500987359,
+        "p50_ms": 54.14447400107747,
+        "p99_ms": 59.25907799974084,
+        "temp_c": 77.0
+      },
+      {
+        "t_s": 60.2,
+        "n": 177,
+        "fps": 17.625825437985775,
+        "p50_ms": 57.164004996593576,
+        "p99_ms": 65.20197699865093,
+        "temp_c": 85.0
+      },
+      {
+        "t_s": 70.2,
+        "n": 172,
+        "fps": 17.157703411199186,
+        "p50_ms": 58.08813499970711,
+        "p99_ms": 63.16985899320571,
+        "temp_c": 85.0
+      },
+      {
+        "t_s": 80.2,
+        "n": 179,
+        "fps": 17.891467476863436,
+        "p50_ms": 55.05641200579703,
+        "p99_ms": 62.25862599967513,
+        "temp_c": 77.0
+      },
+      {
+        "t_s": 90.2,
+        "n": 176,
+        "fps": 17.574999205109517,
+        "p50_ms": 54.975253999145934,
+        "p99_ms": 94.19275599793764,
+        "temp_c": 75.0
+      }
+    ],
+    "NPU": [
+      {
+        "t_s": 10.1,
+        "n": 55,
+        "fps": 5.4410884495476655,
+        "p50_ms": 182.29783300193958,
+        "p99_ms": 259.3185270015965,
+        "temp_c": 62.0
+      },
+      {
+        "t_s": 20.1,
+        "n": 55,
+        "fps": 5.480862423348185,
+        "p50_ms": 182.23360300180502,
+        "p99_ms": 188.09050600248156,
+        "temp_c": 58.0
+      },
+      {
+        "t_s": 30.2,
+        "n": 55,
+        "fps": 5.483256837959608,
+        "p50_ms": 182.31630400259746,
+        "p99_ms": 183.50284799817018,
+        "temp_c": 59.0
+      },
+      {
+        "t_s": 40.3,
+        "n": 55,
+        "fps": 5.449502518964127,
+        "p50_ms": 183.51810699823545,
+        "p99_ms": 184.34965799679048,
+        "temp_c": 52.0
+      },
+      {
+        "t_s": 50.4,
+        "n": 55,
+        "fps": 5.450621635818437,
+        "p50_ms": 183.34816100104945,
+        "p99_ms": 185.13574299868196,
+        "temp_c": 53.0
+      },
+      {
+        "t_s": 60.5,
+        "n": 55,
+        "fps": 5.44333145972055,
+        "p50_ms": 183.77095599862514,
+        "p99_ms": 184.90978000045288,
+        "temp_c": 49.0
+      },
+      {
+        "t_s": 70.6,
+        "n": 55,
+        "fps": 5.448876670939951,
+        "p50_ms": 183.49687600129982,
+        "p99_ms": 184.6215929981554,
+        "temp_c": 49.0
+      },
+      {
+        "t_s": 80.6,
+        "n": 55,
+        "fps": 5.451818975726691,
+        "p50_ms": 183.46497700258624,
+        "p99_ms": 184.59046600037254,
+        "temp_c": 53.0
+      },
+      {
+        "t_s": 90.7,
+        "n": 55,
+        "fps": 5.448667569405395,
+        "p50_ms": 183.45126399799483,
+        "p99_ms": 184.87061900668778,
+        "temp_c": 49.0
+      }
+    ]
+  }
+}

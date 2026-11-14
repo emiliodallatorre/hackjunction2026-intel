@@ -1,0 +1,4 @@
+device,precision,execution_devices,p50_ms,p95_ms,p99_ms,seq_fps,peak_fps,compile_cold_ms,compile_warm_ms,first_infer_ms,mj_per_inference,sustained_drop_pct,peak_temp_c,e2e_p50_ms
+CPU,<Type: 'float32'>,CPU,109.97,127.21,154.91,8.86,9.71,657.5,106.1,172.6,4383.1,-1.5,97.0,126.04
+GPU,<Type: 'float16'>,GPU.0,54.28,64.47,72.06,18.0,17.04,1483.8,149.3,99.9,1710.8,4.6,78.0,91.51
+NPU,unknown,NPU,182.35,183.07,185.39,5.48,5.51,17089.0,40.1,373.7,2535.1,-0.1,87.0,184.84

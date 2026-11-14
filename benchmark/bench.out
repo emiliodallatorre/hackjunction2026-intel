@@ -1,0 +1,302 @@
+./run_benchmark.sh --all --plot --sudo --idle 30 --sustain 100
+=== PatchCore benchmark ===
+  host      intel@roberta
+  repo      /home/intel/Desktop/hackjunction/hackjunction2026-intel
+  model     /home/intel/Desktop/hackjunction/hackjunction2026-intel/anomaly_detection/models/patchcore
+  devices   CPU,GPU,NPU
+  iters     300 (warmup 50)   sustain 100s   idle 30s
+  camera    off (synthetic noise input)
+  sudo      yes
+  estimate  ~12 min
+
+>>> connecting to intel@roberta (password asked once)
+Enter passphrase for key '/home/dennis_orlando/.ssh/id_ed25519': 
+>>> copying bench_core.py
+>>> checking venv: /home/intel/Desktop/hackjunction/hackjunction2026-intel/.venv/bin/activate
+    OK 2026.4.1-22982-e213a147257-releases/2026/4
+>>> remote sudo requested (for RAPL package energy) - it may prompt
+>>> running
+
+    python: /home/intel/Desktop/hackjunction/hackjunction2026-intel/.venv/bin/python3
+    model:  /home/intel/Desktop/hackjunction/hackjunction2026-intel/anomaly_detection/models/patchcore
+[sudo: authenticate] Password:         
+
+==========================================================================
+0. ENVIRONMENT
+==========================================================================
+  timestamp                  2026-11-14T15:04:13-0800
+  hostname                   intel-HP-OmniBook-Ultra-Laptop-14t-kd000
+  kernel                     7.0.0-38-generic
+  cpu_model                  Intel(R) Core(TM) Ultra X9 388H
+  cpu_count                  16
+  openvino_version           2026.4.1-22982-e213a147257-releases/2026/4
+  numpy_version              2.4.6
+  opencv_version             5.0.0
+  python                     3.13.18
+  ov_available_devices       ['CPU', 'GPU', 'NPU']
+  requested_devices          ['CPU', 'GPU', 'NPU']
+  cpu_governor               powersave
+  energy_perf_pref           performance
+  ac_online                  True
+  battery_status             Full
+  running_as_root            True
+  model_dir                  /home/intel/Desktop/hackjunction/hackjunction2026-intel/anomaly_detection/models/patchcore
+  iters                      300
+  warmup                     50
+  sustain_s                  100
+
+  Device details:
+    CPU    Intel(R) Core(TM) Ultra X9 388H
+    GPU    Intel(R) Graphics [0xb080] (iGPU)
+    NPU    Intel(R) AI Boost
+
+  Sensors:
+    energy source            rapl (usable)
+    RAPL readable            ['package-0@intel-rapl:0', 'core@intel-rapl:0:0', 'uncore@intel-rapl:0:1', 'dram@intel-rapl:0:2', 'psys@intel-rapl:1']
+    temp sensors             21 found, primary = coretemp/Package id 0
+
+==========================================================================
+MODEL
+==========================================================================
+  algorithm        Patchcore / wide_resnet50_2 (layers ['layer2', 'layer3'])
+  input            1x3x256x256 FP32
+  model.bin        208.9 MB (coreset ratio 0.1 - the memory bank dominates this)
+  training ROI     [527, 276, 247, 232]  (x, y, w, h in the full camera frame)
+  ov cache dir     /tmp/patchcore_bench_ovcache_0
+
+  The IR contains normalisation + backbone + coreset nearest-neighbour search,
+  so one infer() call is the whole anomaly pipeline. Outputs: pred_score,
+  pred_label, anomaly_map (256x256), pred_mask.
+
+==========================================================================
+1. IDLE BASELINE (30 s, before any load)
+==========================================================================
+  idling so load numbers can be reported as a delta ...
+  idle power     4.04 W  [rapl-package]
+  idle temp      mean=45.9C max=72.0C start=58.0C  [coretemp/Package id 0]
+
+==========================================================================
+DEVICE: CPU
+==========================================================================
+  2. COLD START
+     cold cache (first ever)    read=    5.1  compile=   657.5  first_infer=  172.6  total=   835.2  (ms)
+     warm cache (cached blob)   read=    3.3  compile=   106.1  first_infer=  115.8  total=   225.2  (ms)
+     no cache                   read=    3.2  compile=   531.0  first_infer=  133.2  total=   667.4  (ms)
+     -> blob cache saves 551 ms of compile time on CPU
+
+  3. STEADY-STATE LATENCY (batch 1, LATENCY hint)
+     EXECUTION_DEVICES                ['CPU']
+     NUM_STREAMS                      1
+     OPTIMAL_NUMBER_OF_INFER_REQUESTS 1
+     INFERENCE_NUM_THREADS            16
+     INFERENCE_PRECISION_HINT         <Type: 'float32'>
+  latency (ms)   min=  99.66  p50= 109.97  p90= 123.14
+                 p95= 127.21  p99= 154.91  max= 188.37
+                 mean=112.89  stdev= 11.00
+  throughput     8.86 inferences/s (sequential, batch 1)
+  jitter         p99/p50 = 1.41x (tight)
+  energy         38.82 W avg, 4383.1 mJ/inference  [rapl-package]
+  marginal       +34.78 W over idle -> 3926.6 mJ/inference attributable to inference
+  temperature    start=75.0C mean=87.9C max=97.0C
+
+  4. PEAK THROUGHPUT (async queue, THROUGHPUT hint)
+     parallel requests 4, streams 4
+  throughput     9.71 inferences/s (1.10x the batch-1 rate)
+  energy         29.78 W avg, 3065.3 mJ/inference  [rapl-package]
+  temperature    max=85.0C
+
+  5. END-TO-END BrickInspector.predict() (preprocess + presence + infer)
+     latency (ms)  p50= 126.04  p95= 152.67  p99= 163.57  max= 184.94
+     throughput    7.71 frames/s
+     -> preprocess+presence overhead = 16.06 ms (12.7% of the frame)
+     presence-only p50=1.330 ms (empty-tray fast path, skips the model)
+
+  6. SUSTAINED LOAD (100 s) - thermal throttling
+     running 100 s of continuous batch-1 inference, 10 s buckets ...
+
+       t(s)      fps   p50(ms)   p99(ms)  temp(C)
+         10     7.92    118.86    217.93     81.0
+         20     7.08    139.49    196.93     81.0
+         30     8.04    118.81    151.00     86.0
+         40     8.13    119.06    151.36     85.0
+         50     8.08    119.79    149.88     84.0
+         60     8.16    119.36    154.68     84.0
+         70     8.15    118.52    148.46     83.0
+         80     8.00    121.98    155.39     85.0
+         91     8.05    118.75    151.96     84.0
+
+     burst    (0-10s)  7.92 fps @ 81.0C
+     sustained (last)  8.05 fps @ 84.0C
+     -> drop -1.5%  stable
+     energy   29.94 W avg, 3757.0 mJ/inference  [rapl-package]
+     temps    start=83.0C max=87.0C end=82.0C
+
+==========================================================================
+DEVICE: GPU
+==========================================================================
+  2. COLD START
+     cold cache (first ever)    read=    4.2  compile=  1483.8  first_infer=   99.9  total=  1587.9  (ms)
+     warm cache (cached blob)   read=    3.6  compile=   149.3  first_infer=  108.4  total=   261.2  (ms)
+     no cache                   read=    3.7  compile=   236.4  first_infer=   78.6  total=   318.7  (ms)
+     -> blob cache saves 1335 ms of compile time on GPU
+
+  3. STEADY-STATE LATENCY (batch 1, LATENCY hint)
+     EXECUTION_DEVICES                ['GPU.0']
+     NUM_STREAMS                      1
+     OPTIMAL_NUMBER_OF_INFER_REQUESTS 1
+     INFERENCE_PRECISION_HINT         <Type: 'float16'>
+     GPU_HOST_TASK_PRIORITY           Priority.MEDIUM
+  latency (ms)   min=  51.99  p50=  54.28  p90=  60.01
+                 p95=  64.47  p99=  72.06  max=  76.76
+                 mean= 55.55  stdev=  4.04
+  throughput     18.00 inferences/s (sequential, batch 1)
+  jitter         p99/p50 = 1.33x (tight)
+  energy         30.80 W avg, 1710.8 mJ/inference  [rapl-package]
+  marginal       +26.76 W over idle -> 1486.4 mJ/inference attributable to inference
+  temperature    start=77.0C mean=75.4C max=78.0C
+
+  4. PEAK THROUGHPUT (async queue, THROUGHPUT hint)
+     parallel requests 4, streams 2
+  throughput     17.04 inferences/s (0.95x the batch-1 rate)
+  energy         29.87 W avg, 1753.1 mJ/inference  [rapl-package]
+  temperature    max=75.0C
+
+  5. END-TO-END BrickInspector.predict() (preprocess + presence + infer)
+     latency (ms)  p50=  91.51  p95=  95.22  p99=  98.50  max= 101.08
+     throughput    10.87 frames/s
+     -> preprocess+presence overhead = 37.23 ms (40.7% of the frame)
+     presence-only p50=1.029 ms (empty-tray fast path, skips the model)
+
+  6. SUSTAINED LOAD (100 s) - thermal throttling
+     running 100 s of continuous batch-1 inference, 10 s buckets ...
+
+       t(s)      fps   p50(ms)   p99(ms)  temp(C)
+         10    18.43     53.96     64.22     77.0
+         20    18.44     54.03     61.95     77.0
+         30    18.40     54.08     58.65     77.0
+         40    18.36     54.20     61.87     76.0
+         50    18.39     54.14     59.26     77.0
+         60    17.63     57.16     65.20     85.0
+         70    17.16     58.09     63.17     85.0
+         80    17.89     55.06     62.26     77.0
+         90    17.57     54.98     94.19     75.0
+
+     burst    (0-10s)  18.43 fps @ 77.0C
+     sustained (last)  17.57 fps @ 75.0C
+     -> drop 4.6%  stable
+     energy   29.97 W avg, 1688.0 mJ/inference  [rapl-package]
+     temps    start=77.0C max=85.0C end=74.0C
+
+==========================================================================
+DEVICE: NPU
+==========================================================================
+
+  2. COLD START
+     cold cache (first ever)    read=    5.1  compile= 17089.0  first_infer=  373.7  total= 17467.8  (ms)
+     warm cache (cached blob)   read=    4.4  compile=    40.1  first_infer=  397.0  total=   441.5  (ms)
+     no cache                   read=    4.1  compile= 17316.1  first_infer=  367.6  total= 17687.9  (ms)
+     -> blob cache saves 17049 ms of compile time on NPU
+
+  3. STEADY-STATE LATENCY (batch 1, LATENCY hint)
+     EXECUTION_DEVICES                NPU
+     OPTIMAL_NUMBER_OF_INFER_REQUESTS 1
+  latency (ms)   min= 181.44  p50= 182.35  p90= 182.77
+                 p95= 183.07  p99= 185.39  max= 191.48
+                 mean=182.45  stdev=  0.75
+  throughput     5.48 inferences/s (sequential, batch 1)
+  jitter         p99/p50 = 1.02x (tight)
+  energy         13.89 W avg, 2535.1 mJ/inference  [rapl-package]
+  marginal       +9.85 W over idle -> 1797.2 mJ/inference attributable to inference
+  temperature    start=72.0C mean=67.2C max=87.0C
+
+  4. PEAK THROUGHPUT (async queue, THROUGHPUT hint)
+     parallel requests 8, streams ?
+  throughput     5.51 inferences/s (1.01x the batch-1 rate)
+  energy         14.32 W avg, 2596.1 mJ/inference  [rapl-package]
+  temperature    max=95.0C
+
+  5. END-TO-END BrickInspector.predict() (preprocess + presence + infer)
+     latency (ms)  p50= 184.84  p95= 185.86  p99= 188.37  max= 189.13
+     throughput    5.41 frames/s
+     -> preprocess+presence overhead = 2.49 ms (1.3% of the frame)
+     presence-only p50=0.955 ms (empty-tray fast path, skips the model)
+
+  6. SUSTAINED LOAD (100 s) - thermal throttling
+     running 100 s of continuous batch-1 inference, 10 s buckets ...
+
+       t(s)      fps   p50(ms)   p99(ms)  temp(C)
+         10     5.44    182.30    259.32     62.0
+         20     5.48    182.23    188.09     58.0
+         30     5.48    182.32    183.50     59.0
+         40     5.45    183.52    184.35     52.0
+         50     5.45    183.35    185.14     53.0
+         60     5.44    183.77    184.91     49.0
+         71     5.45    183.50    184.62     49.0
+         81     5.45    183.46    184.59     53.0
+         91     5.45    183.45    184.87     49.0
+
+     burst    (0-10s)  5.44 fps @ 62.0C
+     sustained (last)  5.45 fps @ 49.0C
+     -> drop -0.1%  stable
+     energy   8.50 W avg, 1557.8 mJ/inference  [rapl-package]
+     temps    start=67.0C max=76.0C end=52.0C
+
+==========================================================================
+7. MEMORY
+==========================================================================
+  peak RSS (VmHWM)  2531.9 MB
+  current RSS       973.9 MB
+  model.bin on disk 208.9 MB
+  NOTE: peak covers the whole process incl. every device compiled above,
+        so it is an upper bound, not per-device cost.
+
+==========================================================================
+8. CAMERA (optional, measured separately from inference)
+==========================================================================
+  skipped (no --camera). Inference numbers above used synthetic noise,
+  which is what you want for a silicon benchmark: no camera bandwidth in the loop.
+
+==========================================================================
+SUMMARY (one row per device)
+==========================================================================
+  device      p50     p95     p99     seq    peak     cold     warm   mJ/inf  drop%  maxC
+               ms      ms      ms     fps     fps       ms       ms                      
+  ---------------------------------------------------------------------------------------
+  CPU      109.97  127.21  154.91    8.86    9.71    657.5    106.1   4383.1   -1.5  97.0
+  GPU       54.28   64.47   72.06   18.00   17.04   1483.8    149.3   1710.8    4.6  78.0
+  NPU      182.35  183.07  185.39    5.48    5.51  17089.0     40.1   2535.1   -0.1  87.0
+
+==========================================================================
+OUTPUT FILES
+==========================================================================
+  /tmp/patchcore_bench/result_20261115_000405.json  (33.0 KB)
+  /tmp/patchcore_bench/result_20261115_000405_traces.csv  (401.0 KB)
+  /tmp/patchcore_bench/result_20261115_000405_latencies.csv  (51.3 KB)
+  /tmp/patchcore_bench/result_20261115_000405_sustained.csv  (2.0 KB)
+  /tmp/patchcore_bench/result_20261115_000405_summary.csv  (0.5 KB)
+
+  Plot them with:
+    python3 benchmark/plot_benchmark.py /tmp/patchcore_bench/result_20261115_000405.json
+Shared connection to roberta closed.
+
+>>> fetching results into benchmark/results/
+    /sources/hackjunction2026-intel/benchmark/results/result_20261115_000405.json
+    /sources/hackjunction2026-intel/benchmark/results/result_20261115_000405_latencies.csv
+    /sources/hackjunction2026-intel/benchmark/results/result_20261115_000405_summary.csv
+    /sources/hackjunction2026-intel/benchmark/results/result_20261115_000405_sustained.csv
+    /sources/hackjunction2026-intel/benchmark/results/result_20261115_000405_traces.csv
+=== log: intel@roberta:/tmp/patchcore_bench/last_run.log
+
+>>> generating graphs
+
+result_20261115_000405.json
+  host intel-HP-OmniBook-Ultra-Laptop-14t-kd000  cpu Intel(R) Core(TM) Ultra X9 388H
+  devices benchmarked: ['CPU', 'GPU', 'NPU']
+  trace samples 6557, latency samples 1800, sustained buckets 27
+  writing:
+  /sources/hackjunction2026-intel/benchmark/results/plots_result_20261115_000405/latency_distribution.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_result_20261115_000405/latency_over_time.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_result_20261115_000405/power_temperature.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_result_20261115_000405/sustained_throughput.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_result_20261115_000405/cold_start.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_result_20261115_000405/device_comparison.png
