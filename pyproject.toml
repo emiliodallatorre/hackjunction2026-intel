@@ -9,6 +9,13 @@ authors = [
 requires-python = ">=3.13"
 dependencies = []
 
+[project.optional-dependencies]
+robot = [
+    "physicalai[capture,transport] @ git+https://github.com/openvinotoolkit/physicalai.git@8381d439c2660d357b4b9d633f28ea7e7ed42c81",
+    "physicalai-so101-plugin~=0.3.0",
+    "physicalai-studio-plugin~=0.5.0",
+]
+
 [project.scripts]
 hackjunction2026-intel = "hackjunction2026_intel:main"
 

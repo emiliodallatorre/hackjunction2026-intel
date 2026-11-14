@@ -42,8 +42,12 @@ This pipeline follows the Physical AI Studio setup sequence from application sta
 
 ### Manipulation policy
 
+- Decision: train one π0.5 model on all three tasks (present for inspection, place in good dish, place in bad dish), selected at runtime by the task instruction
+- Record all three tasks with distinct instructions and roughly balanced good and bad placement episodes
 - Upload demonstrations to Physical AI Studio
 - Fine-tune a vision-language-action (VLA) policy on cloud GPUs
+- Before integrating anomaly detection, verify that changing only the instruction changes which dish the robot chooses
+- Fall back to separate models only if the single model cannot reliably follow the instruction
 - Evaluate picking and presentation across varied brick positions
 - Collect additional demonstrations and retrain if performance is insufficient
 
