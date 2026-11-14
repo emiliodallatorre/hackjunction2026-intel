@@ -8,6 +8,8 @@ services:
       target: physical-ai-studio-xpu
       additional_contexts:
         libs: https://github.com/open-edge-platform/physical-ai-studio.git#285924d9381238d3ef2478294c2b85a0eb6ac62b:library
+    env_file:
+      - .env
     container_name: physical-ai-studio
     restart: unless-stopped
     ports:
