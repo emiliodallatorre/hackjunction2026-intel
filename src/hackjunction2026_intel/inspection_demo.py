@@ -6,11 +6,13 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from . import sorting
 from .sorting import open_export, present_block
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_REPORT = Path("inspection.png")
+DEFAULT_PRESENT_TIMEOUT_S = 45.0
 
 
 def save_report(decision: Any, path: Path) -> None:
@@ -60,7 +62,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         help=f"Where to save the analysed crop with its heatmap (default: {DEFAULT_REPORT})",
     )
     parser.add_argument("--no-report", action="store_true", help="Do not save the inspection image")
+    parser.add_argument(
+        "--present-timeout",
+        type=float,
+        default=DEFAULT_PRESENT_TIMEOUT_S,
+        help=f"Seconds the arm may take to bring the brick into view (default: {DEFAULT_PRESENT_TIMEOUT_S})",
+    )
     args = parser.parse_args(argv)
+    sorting.PRESENT_DURATION_S = args.present_timeout
     with open_export(args.export) as export_root:
         run(export_root, None if args.no_report else args.report)
 
