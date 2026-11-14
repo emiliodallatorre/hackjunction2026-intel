@@ -66,6 +66,15 @@ class InspectionStation:
             self.camera.read()
         return self.camera.read()
 
+    def is_empty(self) -> bool:
+        """Whether inspecting the latest frame would give ``Verdict.EMPTY``. Cheap: skips the anomaly model."""
+        if self.inspector.presence is None:
+            raise RuntimeError(
+                "Model has no empty-ROI reference, so it never reports EMPTY "
+                "(collect empty frames, then `brick-ad prepare` + `brick-ad fit-empty`)."
+            )
+        return self.inspector.is_empty(self.camera.read())
+
     def look(self) -> Prediction:
         """Grab a frame and score it."""
         return self.inspector.predict(self.grab())

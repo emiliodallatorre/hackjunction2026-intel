@@ -1,6 +1,8 @@
 import copy
+import enum
 import sys
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -79,11 +81,11 @@ class RunPolicyTests(unittest.TestCase):
         self.assertEqual(self.recipe.init_args, expected)
         self.assertEqual(self.config_path.read_text(), "# Mocked Studio configuration\n")
         self.config_api.load.assert_called_once_with(self.config_path)
-        self.runtime.run.assert_called_once_with(duration_s=2.5, return_to_initial_state=False)
+        self.runtime.run.assert_called_once_with(duration_s=2.5, stop_event=None, return_to_initial_state=False)
         measured = self.runtime.robot.get_observation.return_value
         self.runtime.robot.send_action.assert_called_once_with(measured.joint_positions)
         calls = self.runtime.mock_calls
-        self.assertLess(calls.index(call.run(duration_s=2.5, return_to_initial_state=False)),
+        self.assertLess(calls.index(call.run(duration_s=2.5, stop_event=None, return_to_initial_state=False)),
                         calls.index(call.robot.get_observation()))
         self.assertLess(calls.index(call.robot.send_action(measured.joint_positions)),
                         calls.index(call.__exit__(None, None, None)))
@@ -101,6 +103,21 @@ class RunPolicyTests(unittest.TestCase):
                 self.runtime.run.return_value = ticks
                 with self.assertRaises(error):
                     sorting.run_policy(self.export, "present", duration_s=1)
+                self.runtime.robot.send_action.assert_called_once()
+                self.runtime.__exit__.assert_called_once()
+
+    def test_stop_event_completes_the_stage_and_its_absence_is_a_timeout(self) -> None:
+        signal = SimpleNamespace(is_set=lambda: True)
+        self.runtime.last_run_reason = "stop_requested"
+        self.runtime.run.return_value = 0
+        sorting.run_policy(self.export, "present", duration_s=1, stop_event=signal)
+        self.runtime.run.assert_called_once_with(duration_s=1, stop_event=signal, return_to_initial_state=False)
+        for reason in ("duration_elapsed", "error"):
+            with self.subTest(reason=reason):
+                self.runtime.reset_mock()
+                self.runtime.last_run_reason = reason
+                with self.assertRaisesRegex(RuntimeError, "did not complete"):
+                    sorting.run_policy(self.export, "present", duration_s=1, stop_event=signal)
                 self.runtime.robot.send_action.assert_called_once()
                 self.runtime.__exit__.assert_called_once()
 
@@ -149,8 +166,112 @@ class RunPolicyTests(unittest.TestCase):
         self.recipe.instantiate.assert_not_called()
 
 
+class Verdict(enum.Enum):
+    EMPTY = "empty"
+    ROTATE = "rotate"
+    GOOD = "good"
+    DEFECTIVE = "defective"
+
+
+def fake_anomaly_detection(station: object | None = None) -> ModuleType:
+    module = ModuleType("hackjunction2026_intel.anomaly_detection")
+    module.Verdict = Verdict
+    module.InspectionStation = MagicMock(return_value=station or MagicMock())
+    return module
+
+
+class PresenceWatchTests(unittest.TestCase):
+    def test_confirms_only_after_continuous_presence(self) -> None:
+        # One clock second per present reading; the absent reading restarts the count.
+        readings = iter([True, True, True, False, True, True, True, True])
+        clock = iter(range(100))
+        watch = sorting.PresenceWatch(lambda: next(readings), 3, poll_s=0, clock=lambda: next(clock))
+        with watch:
+            watch._thread.join(timeout=5)
+        self.assertEqual(list(readings), [], "confirmed before the brick stayed in view long enough")
+        self.assertTrue(watch.confirmed.is_set())
+        self.assertTrue(watch.is_set())
+        self.assertIsNone(watch.error)
+
+    def test_not_confirmed_while_presence_keeps_dropping(self) -> None:
+        watch = sorting.PresenceWatch(lambda: False, 0, poll_s=0.001)
+        with watch:
+            time.sleep(0.05)
+        self.assertFalse(watch.is_set())
+
+    def test_check_error_stops_the_run_and_is_kept(self) -> None:
+        def broken() -> bool:
+            raise RuntimeError("camera lost")
+
+        watch = sorting.PresenceWatch(broken, 3, poll_s=0)
+        with watch:
+            watch._thread.join(timeout=5)
+        self.assertTrue(watch.is_set())
+        self.assertFalse(watch.confirmed.is_set())
+        self.assertIsInstance(watch.error, RuntimeError)
+
+
+class InspectionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        modules = patch.dict(sys.modules, {"hackjunction2026_intel.anomaly_detection": fake_anomaly_detection()})
+        modules.start()
+        self.addCleanup(modules.stop)
+        self.station = MagicMock()
+        self.export = Path("/unused-export")
+
+    def test_verdicts_map_to_defective_or_raise(self) -> None:
+        for verdict, expected in ((Verdict.DEFECTIVE, True), (Verdict.GOOD, False)):
+            self.station.inspect.return_value = SimpleNamespace(verdict=verdict, message=verdict.name)
+            self.assertIs(sorting.inspect_block(self.station), expected)
+        for verdict in (Verdict.EMPTY, Verdict.ROTATE):
+            with self.subTest(verdict=verdict):
+                self.station.inspect.return_value = SimpleNamespace(verdict=verdict, message=verdict.name)
+                with self.assertRaisesRegex(RuntimeError, "inconclusive"):
+                    sorting.inspect_block(self.station)
+
+    def test_presentation_completes_only_when_not_empty(self) -> None:
+        for empty, completes in ((False, True), (True, False)):
+            with self.subTest(empty=empty):
+                self.station.is_empty.return_value = empty
+                seen = {}
+
+                def run_until_stop(export, task, *, duration_s, stop_event) -> None:
+                    seen.update(export=export, task=task, duration_s=duration_s)
+                    stop_event._thread.join(timeout=0.2)
+                    seen["completed"] = stop_event.is_set()
+
+                with patch.object(sorting, "PRESENT_CONFIRM_S", 0), \
+                        patch.object(sorting, "run_policy", side_effect=run_until_stop):
+                    sorting.present_block(self.export, self.station)
+                self.assertEqual(seen["completed"], completes)
+                self.assertEqual((seen["export"], seen["task"], seen["duration_s"]),
+                                 (self.export, sorting.PRESENT_TASK, sorting.PRESENT_DURATION_S))
+
+    def test_presentation_requires_presence_calibration_and_a_working_check(self) -> None:
+        self.station.inspector.presence = None
+        with patch.object(sorting, "run_policy") as run, self.assertRaisesRegex(RuntimeError, "empty-ROI"):
+            sorting.present_block(self.export, self.station)
+        run.assert_not_called()
+
+        self.station.inspector.presence = object()
+        self.station.is_empty.side_effect = OSError("camera lost")
+
+        def wait_for_watch(*args, stop_event, **kwargs) -> None:
+            stop_event._thread.join(timeout=5)
+
+        with patch.object(sorting, "run_policy", side_effect=wait_for_watch):
+            with self.assertRaisesRegex(RuntimeError, "EMPTY check failed"):
+                sorting.present_block(self.export, self.station)
+
+
 class SortingCycleTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.station = MagicMock()
+        modules = patch.dict(
+            sys.modules, {"hackjunction2026_intel.anomaly_detection": fake_anomaly_detection(self.station)}
+        )
+        modules.start()
+        self.addCleanup(modules.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -168,17 +289,19 @@ class SortingCycleTests(unittest.TestCase):
             (True, "Move the brick to the orange dish", sorting.BAD_DURATION_S),
             (False, "Move the brick to the yellow dish", sorting.GOOD_DURATION_S),
         ):
-            with self.subTest(defective=defective), patch.object(sorting, "run_policy") as run:
-                def inspect() -> bool:
-                    self.assertEqual(run.call_count, 1)
+            with self.subTest(defective=defective), patch.object(sorting, "run_policy") as run, \
+                    patch.object(sorting, "present_block") as present:
+                def inspect(station: object) -> bool:
+                    self.assertIs(station, self.station.__enter__.return_value)
+                    present.assert_called_once_with(self.export, station)
+                    run.assert_not_called()
                     return defective
 
                 with patch.object(sorting, "inspect_block", side_effect=inspect):
                     sorting.main(["--export", str(self.export)])
-                self.assertEqual(run.call_args_list, [
-                    call(self.export, "Move any brick to the center", duration_s=1.0),
-                    call(self.export, task, duration_s=duration),
-                ])
+                self.assertEqual(run.call_args_list, [call(self.export, task, duration_s=duration)])
+                # The inspection camera is released before placement.
+                self.station.__exit__.assert_called()
 
     def test_zip_export_is_extracted_including_a_wrapping_folder(self) -> None:
         archive = self.root / "export.zip"
@@ -186,7 +309,8 @@ class SortingCycleTests(unittest.TestCase):
             zipped.writestr("my-model/runtime.yaml", "# zipped\n")
             zipped.writestr("my-model/exports/openvino/manifest.json", "{}")
         seen: list[Path] = []
-        with patch.object(sorting, "run_policy", side_effect=lambda root, *a, **k: seen.append(root)):
+        with patch.object(sorting, "run_policy", side_effect=lambda root, *a, **k: seen.append(root)), \
+                patch.object(sorting, "present_block", side_effect=lambda root, *a: seen.append(root)):
             with patch.object(sorting, "inspect_block", return_value=False):
                 sorting.main(["--export", str(archive)])
         self.assertEqual(len(seen), 2)
@@ -210,12 +334,21 @@ class SortingCycleTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_presentation_failure_prevents_inspection_or_placement(self) -> None:
-        with patch.object(sorting, "run_policy", side_effect=RuntimeError("aborted")) as run:
+        with patch.object(sorting, "run_policy") as run, \
+                patch.object(sorting, "present_block", side_effect=RuntimeError("aborted")) as present:
             with patch.object(sorting, "inspect_block") as inspect:
                 with self.assertRaisesRegex(RuntimeError, "aborted"):
                     sorting.main(["--export", str(self.export)])
-                run.assert_called_once()
+                present.assert_called_once()
                 inspect.assert_not_called()
+                run.assert_not_called()
+
+    def test_inconclusive_inspection_prevents_placement(self) -> None:
+        with patch.object(sorting, "run_policy") as run, patch.object(sorting, "present_block"):
+            with patch.object(sorting, "inspect_block", side_effect=RuntimeError("inconclusive")):
+                with self.assertRaisesRegex(RuntimeError, "inconclusive"):
+                    sorting.main(["--export", str(self.export)])
+            run.assert_not_called()
 
     def test_dry_run_without_export_routes_both_outcomes_without_loading_sdk(self) -> None:
         for defective, placement in ((True, sorting.BAD_TASK), (False, sorting.GOOD_TASK)):

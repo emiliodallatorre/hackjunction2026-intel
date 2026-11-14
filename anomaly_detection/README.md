@@ -129,7 +129,7 @@ decision = station.inspect(rotate=rotate_wrist)   # per brick, once it is presen
 # decision.verdict: EMPTY -> re-grasp, GOOD -> good bowl, DEFECTIVE -> defective bowl
 ```
 
-Without `rotate`, `inspect()` returns the `ROTATE` decision so the caller can rotate and continue with `station.decide(decision.looks + [station.look()])`. `station.grab()` returns a raw frame for logging.
+Without `rotate`, `inspect()` returns the `ROTATE` decision so the caller can rotate and continue with `station.decide(decision.looks + [station.look()])`. `station.grab()` returns a raw frame for logging. `station.is_empty()` tells whether inspecting the latest frame would give `Verdict.EMPTY`, using the same rule as `inspect()` (`BrickInspector.is_empty`) but without running the anomaly model; the sorting cycle polls it and treats presentation as complete once it has been False for 3 seconds.
 
 The inspection camera must be opened **only** by this code: do not add it as a camera in Physical AI Studio (a V4L2 camera streams to one process, and opening it elsewhere resets its controls).
 

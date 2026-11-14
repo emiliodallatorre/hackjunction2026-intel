@@ -21,9 +21,17 @@ services:
       SYCL_CACHE_DIR: /app/storage/.sycl-cache
       SYCL_UR_USE_LEVEL_ZERO_V2: "0"
       HF_TOKEN: ${HF_TOKEN:-}
+      # Brick anomaly detection: config and model are mounted so host-side `brick-ad` changes apply on restart.
+      BRICK_AD_CONFIG: /brick/config.yaml
     volumes:
       - physical-ai-studio-storage:/app/storage
       - ${HOME}/.cache/huggingface/lerobot/calibration:/home/appuser/.cache/huggingface/lerobot/calibration:ro
+      # Paths are relative to the repository root (the run script's --project-directory).
+      # Config paths resolve against /brick, so the model must sit at /brick/models/patchcore.
+      - ./anomaly_detection/config.yaml:/brick/config.yaml:ro
+      - ./anomaly_detection/models/patchcore:/brick/models/patchcore:ro
+      # Privileged containers get /dev nodes but not udev's by-id symlinks used as the camera source.
+      - /dev/v4l:/dev/v4l:ro
     group_add:
       - "${DIALOUT_GID:-dialout}"
       - "${PLUGDEV_GID:-plugdev}"

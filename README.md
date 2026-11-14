@@ -1,6 +1,6 @@
 # Brick inspection and sorting
 
-## Timed sorting demo
+## Sorting demo
 
 ### Hardware-free dry run
 
@@ -11,7 +11,7 @@ PYTHONPATH=src python3 -m hackjunction2026_intel.sorting --dry-run
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-The dry run logs presentation, the random inspection decision, and the selected placement without loading the SDK or connecting hardware. It allows the default zero durations. The tests exercise both sorting outcomes and failure handling. This does not validate model inference, calibration, camera access, serial permissions, or safe stage durations. Once downloaded, add `--export` to check the export's required file/folder layout; runtime configuration contents and model weights are still not validated.
+The dry run logs presentation, a random inspection decision (the anomaly model is not used), and the selected placement without loading the SDK, the inspection camera, or connecting hardware. It allows zero durations. The tests exercise both sorting outcomes and failure handling. This does not validate model inference, calibration, camera access, serial permissions, or safe stage durations. Once downloaded, add `--export` to check the export's required file/folder layout; runtime configuration contents and model weights are still not validated.
 
 On a host with the existing Studio image, a separate disposable container can reuse its Python and SDK without installing `uv` or rebuilding anything:
 
@@ -40,7 +40,13 @@ uv run --extra robot python -m hackjunction2026_intel.sorting --export ~/Downloa
 
 The optional robot dependencies match the runtime revision and SO-101/Studio plugin versions used by the Studio image in [docker-compose.yml](infra/docker-compose.yml).
 
-The script runs the single multi-task π0.5 model with the presentation instruction for a configured duration, uses `random() < 0.5` to mark the block defective, then runs the same model with the corresponding placement instruction for its configured duration. This is a timed demonstration: elapsed duration does not establish that the block was picked, presented, or released correctly.
+The script opens the inspection camera and anomaly model (`InspectionStation`, see [anomaly_detection/README.md](anomaly_detection/README.md)) before any motion, then:
+
+1. Runs the single multi-task π0.5 model with the presentation instruction until inspection has been anything other than `EMPTY` continuously for `PRESENT_CONFIRM_S` (3 seconds); the robot then holds the brick in place. The check uses the same `EMPTY` rule as the inspection but skips the anomaly model, so it does not slow the policy. If that does not happen within `PRESENT_DURATION_S`, the cycle aborts
+2. Inspects the brick with the anomaly model. `DEFECTIVE` and `GOOD` pick the placement; no brick (`EMPTY`) or an uncertain score (`ROTATE`) aborts the cycle, since there is no rotate stage
+3. Closes the inspection camera and runs the same model with the corresponding placement instruction for its configured duration. Placement is still timed: elapsed duration does not establish that the brick was released correctly
+
+The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): without it the model never reports `EMPTY`, so the cycle aborts before moving. The config comes from `$BRICK_AD_CONFIG`, else `anomaly_detection/config.yaml`, with the model at `anomaly_detection/models/patchcore/`. [docker-compose.yml](infra/docker-compose.yml) mounts both into the Studio container at `/brick` and sets `BRICK_AD_CONFIG`.
 
 ### Configuration
 
@@ -53,7 +59,8 @@ The task instructions in [sorting.py](src/hackjunction2026_intel/sorting.py) mat
 Before using hardware:
 
 - If using a different dataset, update the task instructions to match its demonstrations
-- Set `PRESENT_DURATION_S`, `GOOD_DURATION_S`, and `BAD_DURATION_S` to positive, supervised-test durations; all default to zero and prevent motion until configured
+- Set `PRESENT_DURATION_S` (presentation timeout), `GOOD_DURATION_S`, and `BAD_DURATION_S` (placement durations) to positive, supervised-test values; zero prevents motion
+- Set the inspection camera source in `anomaly_detection/config.yaml`, and keep that camera out of the export's `runtime.yaml`: only the inspection code may open it
 - Check the export's `runtime.yaml` for the serial port, robot calibration, camera identities/names/settings, control rate, and any safety callbacks; lines marked `# CHANGE_ME` contain machine-specific device paths
 - Ensure presentation ends in a state compatible with both placement instructions
 
@@ -63,7 +70,7 @@ Each stage creates a fresh runtime from the same export, whose policy source res
 
 Runtime errors, early stops, and Ctrl+C abort the cycle rather than advancing to inspection or placement. Hold and cleanup are software requests, not guaranteed physical stopping or an emergency stop. Stop competing Studio sessions before running the standalone script.
 
-Durations use the SDK's control-loop timing, not a hard wall-clock watchdog; slow inference can extend real elapsed time. Model loading is also outside the timed run. Supervise the demo and retain a physical emergency stop. Replace timing with verified stage-completion checks, and random classification with an anomaly detector, before autonomous use.
+Durations and the presentation timeout use the SDK's control-loop timing, not a hard wall-clock watchdog; slow inference can extend real elapsed time. Model loading is also outside the timed run, while the 3-second `EMPTY` check runs on wall-clock time from just before the policy loads. Supervise the demo and retain a physical emergency stop. Replace the timed placement with a verified completion check before autonomous use.
 
 ### Tests
 

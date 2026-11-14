@@ -97,7 +97,7 @@ class BrickInspector:
         patch = preprocess(image, self.roi if crop else None, self.image_size)
 
         presence = self.presence.score(patch) if self.presence else None
-        if check_presence and presence is not None and presence < self.presence.threshold:
+        if check_presence and self._is_empty(presence):
             return Prediction(EMPTY, None, False, presence, None, patch)
 
         rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
@@ -108,6 +108,22 @@ class BrickInspector:
         status = ANOMALY if score >= self.threshold else GOOD
         uncertain = abs(score - self.threshold) < self.uncertain_margin
         return Prediction(status, score, uncertain, presence, anomaly_map, patch)
+
+    def _is_empty(self, presence: float | None) -> bool:
+        return presence is not None and presence < self.presence.threshold
+
+    def is_empty(self, image: np.ndarray | str | Path, crop: bool = True) -> bool:
+        """True exactly when ``predict(image)`` would return status "empty" (``Verdict.EMPTY``).
+
+        Uses the same rule as ``predict`` but skips the anomaly model, so it is cheap enough to poll.
+        Always False when the model has no empty-ROI reference, as ``predict`` then never reports empty.
+        """
+        if not isinstance(image, np.ndarray):
+            image = read_image(image)
+        if self.presence is None:
+            return False
+        patch = preprocess(image, self.roi if crop else None, self.image_size)
+        return self._is_empty(self.presence.score(patch))
 
     def predict_many(self, images, crop: bool = True) -> list[Prediction]:
         return [self.predict(image, crop=crop) for image in images]

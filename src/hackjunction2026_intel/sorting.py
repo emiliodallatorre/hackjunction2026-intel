@@ -1,14 +1,17 @@
-"""Timed demonstration of one pick, inspection, and sorting cycle."""
+"""Demonstration of one pick, inspection, and sorting cycle."""
 
 import argparse
 import logging
+import threading
+import time
 import zipfile
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from math import isfinite
 from pathlib import Path
 from random import random
 from tempfile import TemporaryDirectory
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +26,70 @@ PRESENT_TASK = "Move any brick to the center"
 GOOD_TASK = "Move the brick to the yellow dish"
 BAD_TASK = "Move the brick to the orange dish"
 
+# Presentation ends once inspection has been anything but EMPTY (a brick is in the inspection
+# area) continuously for PRESENT_CONFIRM_S; it aborts if that has not happened within PRESENT_DURATION_S.
+PRESENT_CONFIRM_S = 3.0
+PRESENCE_POLL_S = 0.1
+
 # TODO: Set supervised, validated durations in seconds; zero disables execution.
 PRESENT_DURATION_S = 15.0
 GOOD_DURATION_S = 15.0
 BAD_DURATION_S = 15.0
+
+
+class StopSignal(Protocol):
+    def is_set(self) -> bool: ...
+
+
+class PresenceWatch:
+    """Polls ``is_present`` in a thread and stops a policy run once it stays True for ``hold_s``.
+
+    The sorting cycle passes "inspection is not EMPTY". Pass the watch as the runtime's ``stop_event``.
+    A polling error also stops the run, and is kept in ``error``.
+    """
+
+    def __init__(
+        self,
+        is_present: Callable[[], bool],
+        hold_s: float,
+        poll_s: float = PRESENCE_POLL_S,
+        clock: Callable[[], float] = time.monotonic,
+    ):
+        self._is_present = is_present
+        self._hold_s = hold_s
+        self._poll_s = poll_s
+        self._clock = clock
+        self._halt = threading.Event()
+        self.confirmed = threading.Event()
+        self.error: BaseException | None = None
+        self._thread = threading.Thread(target=self._run, name="presence-watch", daemon=True)
+
+    def is_set(self) -> bool:
+        return self.confirmed.is_set() or self.error is not None
+
+    def _run(self) -> None:
+        since: float | None = None
+        try:
+            while not self._halt.is_set():
+                if self._is_present():
+                    now = self._clock()
+                    since = now if since is None else since
+                    if now - since >= self._hold_s:
+                        self.confirmed.set()
+                        return
+                else:
+                    since = None
+                self._halt.wait(self._poll_s)
+        except BaseException as error:
+            self.error = error
+
+    def __enter__(self) -> "PresenceWatch":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._halt.set()
+        self._thread.join()
 
 
 @contextmanager
@@ -61,8 +124,11 @@ def _validate_duration(duration_s: float) -> None:
         raise ValueError(f"Set a finite, positive stage duration, got {duration_s}")
 
 
-def run_policy(export_root: Path, task: str, *, duration_s: float) -> None:
-    """Run a timed stage, without claiming that the manipulation succeeded."""
+def run_policy(export_root: Path, task: str, *, duration_s: float, stop_event: StopSignal | None = None) -> None:
+    """Run a stage for ``duration_s``, or until ``stop_event`` is set, which then counts as completion.
+
+    Without ``stop_event`` this is a timed stage that does not claim the manipulation succeeded.
+    """
     _validate_duration(duration_s)
     _validate_export(export_root)
 
@@ -96,29 +162,56 @@ def run_policy(export_root: Path, task: str, *, duration_s: float) -> None:
     if not isinstance(runtime, RobotRuntime):
         raise TypeError("Runtime configuration did not instantiate a RobotRuntime")
 
-    logger.warning(
-        "Running timed demo task %r for %s control seconds; task success is NOT verified",
-        task,
-        duration_s,
-    )
+    if stop_event is None:
+        logger.warning(
+            "Running timed demo task %r for %s control seconds; task success is NOT verified",
+            task,
+            duration_s,
+        )
+    else:
+        logger.info("Running task %r until its completion check passes (timeout %s control seconds)", task, duration_s)
     with runtime:
         try:
-            ticks = runtime.run(duration_s=duration_s, return_to_initial_state=False)
-            if runtime.last_run_reason == "interrupted":
+            ticks = runtime.run(duration_s=duration_s, stop_event=stop_event, return_to_initial_state=False)
+            reason = runtime.last_run_reason
+            if reason == "interrupted":
                 raise KeyboardInterrupt("Policy stage interrupted; aborting the sorting cycle")
-            if runtime.last_run_reason != "duration_elapsed" or ticks <= 0:
-                raise RuntimeError(f"Policy stage did not finish its duration: {runtime.last_run_reason}")
+            if stop_event is None and (reason != "duration_elapsed" or ticks <= 0):
+                raise RuntimeError(f"Policy stage did not finish its duration: {reason}")
+            # Zero ticks is fine here: the completion check may already pass before the first tick.
+            if stop_event is not None and reason != "stop_requested":
+                raise RuntimeError(f"Policy stage {task!r} did not complete within {duration_s} s: {reason}")
         finally:
             # Cancel any remaining position target before releasing the driver.
             measured = runtime.robot.get_observation()
             runtime.robot.send_action(measured.joint_positions)
 
 
-def inspect_block() -> bool:
-    """Return True for defective and False for good."""
-    # TODO: Replace this demo-only decision with camera capture and anomaly inference.
-    # Raise on uncertain results or inspection failure rather than assuming good.
-    return random() < 0.5
+def present_block(export_root: Path, station: Any) -> None:
+    """Run the presentation policy until inspection has not been EMPTY for PRESENT_CONFIRM_S."""
+    if station.inspector.presence is None:
+        raise RuntimeError(
+            "The anomaly model has no empty-ROI reference, so it never reports EMPTY and presentation "
+            "cannot be confirmed (collect empty frames, then `brick-ad prepare` + `brick-ad fit-empty`)"
+        )
+    with PresenceWatch(lambda: not station.is_empty(), PRESENT_CONFIRM_S) as watch:
+        run_policy(export_root, PRESENT_TASK, duration_s=PRESENT_DURATION_S, stop_event=watch)
+    if watch.error is not None:
+        raise RuntimeError("EMPTY check failed during presentation") from watch.error
+    logger.info("Inspection not EMPTY for %s seconds; presentation complete", PRESENT_CONFIRM_S)
+
+
+def inspect_block(station: Any) -> bool:
+    """Return True for defective and False for good; raise when there is no brick or the result is uncertain."""
+    from .anomaly_detection import Verdict
+
+    decision = station.inspect()
+    logger.info("Inspection: %s", decision.message)
+    if decision.verdict is Verdict.DEFECTIVE:
+        return True
+    if decision.verdict is Verdict.GOOD:
+        return False
+    raise RuntimeError(f"Inspection inconclusive; not sorting the brick: {decision.message}")
 
 
 def run_cycle(export_root: Path | None, *, dry_run: bool = False) -> None:
@@ -143,12 +236,21 @@ def run_cycle(export_root: Path | None, *, dry_run: bool = False) -> None:
             "Dry run only: no SDK loading, hardware connections, or inference; "
             "runtime configuration and stage durations are not validated"
         )
-    logger.warning("Demo inspection uses randomness, not real defect detection")
+        logger.info("Moving the block to the inspection stage")
+        run_stage(PRESENT_TASK, PRESENT_DURATION_S)
+        logger.warning("Dry-run inspection uses randomness, not the anomaly model")
+        is_defective = random() < 0.5
+    else:
+        if export_root is None:
+            raise ValueError("A Studio runtime export is required for robot execution")
+        from .anomaly_detection import InspectionStation
 
-    logger.info("Moving the block to the inspection stage")
-    run_stage(PRESENT_TASK, PRESENT_DURATION_S)
+        # Opened before any motion so a missing model or camera aborts the cycle up front.
+        with InspectionStation() as station:
+            logger.info("Moving the block to the inspection stage")
+            present_block(export_root, station)
+            is_defective = inspect_block(station)
 
-    is_defective = inspect_block()
     if is_defective:
         logger.info("Inspection decision: defective; placing in the bad dish")
         run_stage(BAD_TASK, BAD_DURATION_S)
@@ -159,7 +261,7 @@ def run_cycle(export_root: Path | None, *, dry_run: bool = False) -> None:
     if dry_run:
         logger.info("Dry-run routing finished; hardware and model readiness remain unverified")
     else:
-        logger.warning("Timed sorting demo finished; manipulation outcomes were not verified")
+        logger.warning("Sorting cycle finished; the placement stage is timed and its outcome was not verified")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
