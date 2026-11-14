@@ -46,7 +46,7 @@ The script opens the inspection camera and anomaly model (`InspectionStation`, s
 2. Inspects the brick with the anomaly model. `DEFECTIVE` and `GOOD` pick the placement; no brick (`EMPTY`) or an uncertain score (`ROTATE`) aborts the cycle, since there is no rotate stage
 3. Closes the inspection camera and runs the same model with the corresponding placement instruction for its configured duration. Placement is still timed: elapsed duration does not establish that the brick was released correctly
 
-The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): without it the model never reports `EMPTY`, so the cycle aborts before moving. The config comes from `$BRICK_AD_CONFIG`, else `anomaly_detection/config.yaml`, with the model at `anomaly_detection/models/patchcore/`. [docker-compose.yml](infra/docker-compose.yml) mounts both into the Studio container at `/brick` and sets `BRICK_AD_CONFIG`.
+The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): without it the model never reports `EMPTY`, so the cycle aborts before moving. The config comes from `$BRICK_AD_CONFIG`, else `anomaly_detection/config.yaml`, with the model at `anomaly_detection/models/patchcore/`. The model is versioned with Git LFS: run `git lfs install` before cloning, or `git lfs pull` afterwards. [docker-compose.yml](infra/docker-compose.yml) mounts both into the Studio container at `/brick` and sets `BRICK_AD_CONFIG`.
 
 ### Configuration
 

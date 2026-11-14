@@ -1,5 +1,8 @@
 # Captured images, prepared datasets, training runs and exported models
 data/
 runs/
-models/
+models/*
+# The deployed model is versioned with Git LFS; its OpenVINO compile cache is not.
+!models/patchcore/
+models/patchcore/ov_cache/
 heatmaps/
