@@ -1,0 +1,58 @@
+# Brick anomaly detection settings. Relative paths resolve against this file's folder.
+
+camera:
+  # Index (0, 1, ...) or device path. Prefer a stable path from `ls /dev/v4l/by-id/`,
+  # e.g. the RealSense colour node: /dev/v4l/by-id/usb-Intel_R__RealSense_TM_..._415_...-video-index0
+  # Run `brick-ad cameras` to see which sources deliver frames.
+  source: /dev/v4l/by-id/usb-Webcam_Webcam_Audio_01.00.00-video-index0
+  width: 1280
+  height: 720
+  fps: 30
+  fourcc: MJPG     # leave empty to keep the camera's default pixel format
+
+  # Locked camera controls, applied every time the camera opens. null = automatic.
+  # `brick-ad lock` measures and writes them; `brick-ad lock --off` resets to automatic.
+  # Units are the camera's own (V4L2): exposure in 100 us, white balance in Kelvin.
+  exposure: 2047
+  gain: 8
+  white_balance: 4474
+  focus: 287
+  # Longest exposure `brick-ad lock` may choose; beyond 333 (33 ms) the camera drops
+  # below 30 fps and moving bricks blur. Gain makes up the rest (adds noise).
+  max_exposure: 2047
+
+# Crop region [x, y, w, h] in camera pixels around the spot where the arm presents the brick.
+# Set it interactively with `brick-ad roi`. null = use the whole frame.
+roi: [527, 276, 247, 232]
+
+collect:
+  burst_interval: 0.3   # seconds between saved frames while burst capture is on
+
+dataset:
+  # Fraction of good images held out for testing. The most recent captures are held out
+  # (not a random sample), so near-duplicate burst frames do not leak into the test set.
+  test_split: 0.2
+
+model:
+  image_size: 256       # crops are resized to image_size x image_size
+  backbone: wide_resnet50_2
+  layers: [layer2, layer3]
+  coreset_sampling_ratio: 0.1
+  num_neighbors: 9
+
+train:
+  accelerator: auto     # Lightning accelerator used for feature extraction: auto, cpu, xpu
+  batch_size: 16
+  num_workers: 4
+
+inference:
+  device: CPU           # OpenVINO device: CPU, GPU, NPU or AUTO
+  # Scores within this distance of the threshold (0.5) are flagged uncertain,
+  # e.g. to rotate the brick and look again before sorting.
+  uncertain_margin: 0.1
+
+paths:
+  raw: data/raw              # full camera frames: raw/good, raw/anomaly, raw/empty
+  dataset: data/dataset      # cropped split: train/{good,empty}, test/{good,anomaly,empty}
+  runs: runs                 # anomalib training runs
+  model: models/patchcore    # exported OpenVINO model + metadata.json

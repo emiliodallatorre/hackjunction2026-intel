@@ -1,0 +1,24 @@
+[project]
+name = "brick-ad"
+version = "0.1.0"
+description = "Data collection, PatchCore training and evaluation tools for the brick anomaly model"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "hackjunction2026-intel",   # runtime: camera, inspector, decision (src/hackjunction2026_intel/anomaly_detection)
+    "anomalib[cpu,openvino]==2.7.0",
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+]
+
+[project.scripts]
+brick-ad = "brick_ad.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
+
+# Workspace member of the repository root: uv settings (torch CPU index, opencv override)
+# and the single uv.lock live in ../pyproject.toml.
+[tool.uv.sources]
+hackjunction2026-intel = { workspace = true }

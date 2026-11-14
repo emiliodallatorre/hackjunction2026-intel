@@ -7,7 +7,14 @@ authors = [
     { name = "Emilio Dalla Torre", email = "info@emiliodallatorre.it" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+# Runtime only: what the robot code needs (and what `pip install .` puts in a robot container).
+# Physical AI Studio's image already ships compatible versions of all of these.
+dependencies = [
+    "numpy",
+    "opencv-python>=4.10",
+    "openvino>=2024.0",
+    "pyyaml>=6.0",
+]
 
 [project.optional-dependencies]
 robot = [
@@ -22,3 +29,28 @@ hackjunction2026-intel = "hackjunction2026_intel:main"
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]
 build-backend = "uv_build"
+
+# anomaly_detection/ is the `brick-ad` training tools (anomalib, CPU torch), a separate workspace
+# member: `uv sync --package brick-ad` / `uv run --package brick-ad brick-ad ...`.
+[tool.uv.workspace]
+members = ["anomaly_detection"]
+
+[tool.uv]
+# anomalib depends on opencv-python-headless, which shares the cv2 module with
+# opencv-python and has no GUI support. Drop it so the camera preview windows work.
+override-dependencies = ["opencv-python-headless; sys_platform == 'never'"]
+# anomalib 2.7 (brick-ad) needs jsonargparse<4.47 and physicalai (robot extra) needs >=4.50, so
+# they get separate environments: `uv sync --extra robot` for the robot, `uv sync --package brick-ad`
+# for training. The anomaly detection runtime (hackjunction2026_intel.anomaly_detection) is in both.
+conflicts = [[{ extra = "robot" }, { package = "brick-ad" }]]
+
+[tool.uv.sources]
+# PatchCore only extracts features (no backprop), so CPU-only torch is enough to
+# train in a minute or two and keeps the install small. Inference runs on OpenVINO.
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

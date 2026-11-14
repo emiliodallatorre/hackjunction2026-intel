@@ -1,0 +1,5 @@
+# Captured images, prepared datasets, training runs and exported models
+data/
+runs/
+models/
+heatmaps/
