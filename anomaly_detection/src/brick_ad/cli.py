@@ -15,6 +15,8 @@ def main() -> None:
 
     p = sub.add_parser("stream", help="live camera preview with ROI (optionally with live inference)")
     p.add_argument("--infer", action="store_true", help="run the trained model on every frame")
+    p.add_argument("--heatmap", action="store_true",
+                   help="overlay the anomaly heatmap on the brick in the main view (implies --infer)")
     p.add_argument("--model", type=Path, help="model folder (default: paths.model)")
 
     p = sub.add_parser("lock", help="lock focus, exposure and white balance to measured values")
@@ -72,7 +74,7 @@ def main() -> None:
     elif args.command == "stream":
         from .capture import stream
 
-        stream(cfg, model_dir if (args.infer or args.model) else None)
+        stream(cfg, model_dir if (args.infer or args.heatmap or args.model) else None, heatmap=args.heatmap)
 
     elif args.command == "lock":
         from .lock import lock, unlock

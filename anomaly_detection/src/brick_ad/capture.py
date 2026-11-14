@@ -22,8 +22,9 @@ def _save(image: np.ndarray, folder: Path) -> Path:
     return path
 
 
-def stream(cfg: Config, model_dir: Path | None = None) -> None:
-    """Live preview with FPS and ROI. With a model, also shows score and heatmap per frame.
+def stream(cfg: Config, model_dir: Path | None = None, heatmap: bool = False) -> None:
+    """Live preview with FPS and ROI. With a model, also shows status, score and heatmap per frame;
+    ``heatmap`` also overlays it on the ROI in the main view.
 
     Keys: s = save snapshot to data/snapshots, q/Esc = quit.
     """
@@ -58,13 +59,20 @@ def stream(cfg: Config, model_dir: Path | None = None) -> None:
                 ms = (time.perf_counter() - t0) * 1000
                 presence = "" if pred.presence is None else f"  presence {pred.presence:.0%}"
                 if pred.is_empty:
-                    color, text = (200, 200, 200), f"EMPTY{presence}"
-                    cv2.imshow(CROP_WINDOW, pred.patch)
+                    color, label = (200, 200, 200), "EMPTY"
+                    text = f"EMPTY (no brick){presence}"
+                    crop_view = pred.patch.copy()
                 else:
                     color = (0, 165, 255) if pred.uncertain else (0, 0, 255) if pred.is_anomaly else (0, 255, 0)
+                    label = f"{pred.status.upper()}{'?' if pred.uncertain else ''} {pred.score:.2f}"
                     text = f"{pred.status.upper()}{' (uncertain)' if pred.uncertain else ''}  score {pred.score:.3f}"
                     text += f"{presence}  ({ms:.0f} ms)"
-                    cv2.imshow(CROP_WINDOW, overlay_heatmap(pred.patch, pred.anomaly_map))
+                    crop_view = overlay_heatmap(pred.patch, pred.anomaly_map)
+                    if heatmap and roi is not None:
+                        x, y, w, h = roi
+                        view[y : y + h, x : x + w] = overlay_heatmap(view[y : y + h, x : x + w], pred.anomaly_map)
+                put_text(crop_view, label, 0, color)
+                cv2.imshow(CROP_WINDOW, crop_view)
                 put_text(view, text, 1, color)
                 draw_roi(view, roi, color)
             elif roi is not None:

@@ -45,7 +45,7 @@ All commands read [`config.yaml`](config.yaml); pass `--config other.yaml` to us
 | 6a. Train on Modal | `uv run --with modal modal run modal_train.py [--gpu L4] [--no-evaluate]` | Same as step 6, but on a Modal GPU: uploads `data/dataset/`, trains there, downloads the model into `models/patchcore/`, then evaluates locally. Log in once with `uv run --with modal modal setup`. |
 | 6b. Empty only | `uv run brick-ad fit-empty` | Recalibrates only empty detection (after `prepare`), in seconds, without retraining PatchCore. |
 | 7. Validate | `uv run brick-ad evaluate --data <dir> --crop --save heatmaps/` | Stats on any folder with `good/`, `anomaly/` and optionally `empty/` subfolders of raw frames; `--save` writes heatmap overlays named by score. |
-| 8. Live check | `uv run brick-ad stream --infer` | Status (EMPTY / GOOD / ANOMALY, uncertain), score and heatmap on every frame. |
+| 8. Live check | `uv run brick-ad stream --infer [--heatmap]` | Status (EMPTY / GOOD / ANOMALY, uncertain), score and heatmap on every frame, in both windows. `--heatmap` also overlays the heatmap on the brick in the main view. |
 | 9. Pipeline demo | `uv run python -m hackjunction2026_intel.anomaly_detection [--show]` | The full decision loop (`decide`): capture, empty → error, uncertain → ask to rotate, else good/defective. |
 | Ad-hoc | `uv run brick-ad predict img.png folder/` | Prints status and score per image (`--no-crop` for already-cropped images). |
 
