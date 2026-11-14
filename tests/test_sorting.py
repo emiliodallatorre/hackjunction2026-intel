@@ -217,6 +217,37 @@ class SortingCycleTests(unittest.TestCase):
                 run.assert_called_once()
                 inspect.assert_not_called()
 
+    def test_dry_run_without_export_routes_both_outcomes_without_loading_sdk(self) -> None:
+        for defective, placement in ((True, sorting.BAD_TASK), (False, sorting.GOOD_TASK)):
+            with self.subTest(defective=defective), patch.object(sorting, "run_policy") as run:
+                with patch.object(sorting, "random", return_value=0.25 if defective else 0.75):
+                    with patch.multiple(
+                        sorting, PRESENT_DURATION_S=0.0, GOOD_DURATION_S=0.0, BAD_DURATION_S=0.0,
+                    ), patch.dict(sys.modules, {"physicalai": None}):
+                        with self.assertLogs(sorting.logger, level="INFO") as logs:
+                            sorting.main(["--dry-run"])
+                stages = [line for line in logs.output if "DRY RUN: task" in line]
+                self.assertEqual(len(stages), 2)
+                self.assertIn(sorting.PRESENT_TASK, stages[0])
+                self.assertIn(placement, stages[1])
+                run.assert_not_called()
+
+    def test_dry_run_with_export_still_rejects_missing_artifacts(self) -> None:
+        with patch.object(sorting, "run_policy") as run:
+            with self.assertRaises(FileNotFoundError):
+                sorting.main(["--dry-run", "--export", str(self.root / "missing.zip")])
+            (self.export / "exports" / "openvino").rmdir()
+            with self.assertRaisesRegex(FileNotFoundError, "openvino"):
+                sorting.main(["--dry-run", "--export", str(self.export)])
+            run.assert_not_called()
+
+    def test_normal_execution_requires_export_even_when_durations_are_configured(self) -> None:
+        with patch.object(sorting, "run_policy") as run:
+            with patch("sys.stderr"), self.assertRaises(SystemExit) as error:
+                sorting.main([])
+            self.assertEqual(error.exception.code, 2)
+            run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

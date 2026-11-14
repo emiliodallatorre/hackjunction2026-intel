@@ -24,9 +24,9 @@ GOOD_TASK = "Move the brick to the yellow dish"
 BAD_TASK = "Move the brick to the orange dish"
 
 # TODO: Set supervised, validated durations in seconds; zero disables execution.
-PRESENT_DURATION_S = 0.0
-GOOD_DURATION_S = 0.0
-BAD_DURATION_S = 0.0
+PRESENT_DURATION_S = 15.0
+GOOD_DURATION_S = 15.0
+BAD_DURATION_S = 15.0
 
 
 @contextmanager
@@ -121,24 +121,45 @@ def inspect_block() -> bool:
     return random() < 0.5
 
 
-def run_cycle(export_root: Path) -> None:
-    for duration in (PRESENT_DURATION_S, GOOD_DURATION_S, BAD_DURATION_S):
-        _validate_duration(duration)
-    _validate_export(export_root)
+def run_cycle(export_root: Path | None, *, dry_run: bool = False) -> None:
+    if not dry_run:
+        for duration in (PRESENT_DURATION_S, GOOD_DURATION_S, BAD_DURATION_S):
+            _validate_duration(duration)
+        if export_root is None:
+            raise ValueError("A Studio runtime export is required for robot execution")
+    if export_root is not None:
+        _validate_export(export_root)
+
+    def run_stage(task: str, duration_s: float) -> None:
+        if dry_run:
+            logger.info("DRY RUN: task %r; configured duration %s seconds; no robot commands", task, duration_s)
+        else:
+            if export_root is None:
+                raise ValueError("A Studio runtime export is required for robot execution")
+            run_policy(export_root, task, duration_s=duration_s)
+
+    if dry_run:
+        logger.warning(
+            "Dry run only: no SDK loading, hardware connections, or inference; "
+            "runtime configuration and stage durations are not validated"
+        )
     logger.warning("Demo inspection uses randomness, not real defect detection")
 
     logger.info("Moving the block to the inspection stage")
-    run_policy(export_root, PRESENT_TASK, duration_s=PRESENT_DURATION_S)
+    run_stage(PRESENT_TASK, PRESENT_DURATION_S)
 
     is_defective = inspect_block()
     if is_defective:
         logger.info("Inspection decision: defective; placing in the bad dish")
-        run_policy(export_root, BAD_TASK, duration_s=BAD_DURATION_S)
+        run_stage(BAD_TASK, BAD_DURATION_S)
     else:
         logger.info("Inspection decision: good; placing in the good dish")
-        run_policy(export_root, GOOD_TASK, duration_s=GOOD_DURATION_S)
+        run_stage(GOOD_TASK, GOOD_DURATION_S)
 
-    logger.warning("Timed sorting demo finished; manipulation outcomes were not verified")
+    if dry_run:
+        logger.info("Dry-run routing finished; hardware and model readiness remain unverified")
+    else:
+        logger.warning("Timed sorting demo finished; manipulation outcomes were not verified")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -146,12 +167,21 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--export",
         type=Path,
-        required=True,
         help="Studio OpenVINO runtime export: the downloaded .zip or its extracted folder",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Log task routing without loading the SDK or connecting hardware; no export required",
+    )
     args = parser.parse_args(argv)
-    with open_export(args.export) as export_root:
-        run_cycle(export_root)
+    if args.export is None:
+        if not args.dry_run:
+            parser.error("--export is required unless --dry-run is used")
+        run_cycle(None, dry_run=True)
+    else:
+        with open_export(args.export) as export_root:
+            run_cycle(export_root, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
