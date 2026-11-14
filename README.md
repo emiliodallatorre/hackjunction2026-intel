@@ -2,6 +2,33 @@
 
 ## Timed sorting demo
 
+### Hardware-free dry run
+
+From the project root, no `uv`, SDK, model export, or robot is needed:
+
+```bash
+PYTHONPATH=src python3 -m hackjunction2026_intel.sorting --dry-run
+PYTHONPATH=src python3 -m unittest discover -s tests -v
+```
+
+The dry run logs presentation, the random inspection decision, and the selected placement without loading the SDK or connecting hardware. It allows the default zero durations. The tests exercise both sorting outcomes and failure handling. This does not validate model inference, calibration, camera access, serial permissions, or safe stage durations. Once downloaded, add `--export` to check the export's required file/folder layout; runtime configuration contents and model weights are still not validated.
+
+On a host with the existing Studio image, a separate disposable container can reuse its Python and SDK without installing `uv` or rebuilding anything:
+
+```bash
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+  --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+  --workdir /workspace \
+  --env PYTHONPATH=/workspace/src --env PYTHONDONTWRITEBYTECODE=1 \
+  --entrypoint /app/application/backend/.venv/bin/python \
+  physical-ai-studio-xpu:junction2026 \
+  -m hackjunction2026_intel.sorting --dry-run
+```
+
+Replace the final module invocation with `-m unittest discover -s tests -v` to run the tests in that environment. This container has no host devices or Studio storage mounted and does not affect the running Studio service. It is deliberately unsuitable for real robot execution; hardware access and calibration mounts must be configured separately before supervised use.
+
+### Robot execution
+
 Install the robot dependencies and run from the project root on the robot host:
 
 ```bash
