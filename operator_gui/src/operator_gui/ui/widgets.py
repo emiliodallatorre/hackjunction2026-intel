@@ -104,9 +104,12 @@ class ModelPicker:
 
 
 class LiveView:
-    def __init__(self, dry_run: bool):
+    def __init__(self, dry_run: bool, controller: CycleController | None = None,
+                 on_error: Callable[[str], None] | None = None):
         self._seq = -1
         self._dry_run = dry_run
+        self._controller = controller
+        self._on_error = on_error or (lambda _text: None)
         with ui.element("div").classes("panel flex flex-col gap-3 w-full"):
             with ui.row().classes("items-center justify-between w-full"):
                 ui.label("Inspection camera").classes("caption")
@@ -115,11 +118,26 @@ class LiveView:
                 self.image = ui.interactive_image().classes("w-full h-full")
                 self.note = ui.label().classes(
                     "absolute inset-x-0 bottom-0 px-4 py-3 mono text-sm bg-black/70 text-center")
+                # Inspect the current view on demand; the idle preview already holds the camera.
+                self.analyze = ui.button("Analyze", icon="biotech", on_click=self._analyze) \
+                    .props("unelevated size=md text-color=black") \
+                    .classes("absolute bottom-3 right-3 px-4 font-bold z-10") \
+                    .tooltip("Inspect what the camera sees now, without moving the robot")
+
+    def _analyze(self) -> None:
+        if self._controller is None:
+            return
+        try:
+            self._controller.analyze()
+        except Exception as error:
+            self._on_error(str(error))
 
     def refresh(self, status: Status) -> None:
         if status.frame and status.frame_seq != self._seq:
             self._seq = status.frame_seq
             self.image.set_source(jpeg_url(status.frame))
+        # Only possible while the preview holds the camera, i.e. while nothing else runs.
+        self.analyze.set_enabled(status.phase is Phase.IDLE and status.preview_live)
         live = (status.camera_live and status.phase is not Phase.IDLE) or status.preview_live
         self.badge.set_text("LIVE" if live else "IDLE")
         self.badge.style(replace=theme.pill_style(theme.DANGER if live else theme.MUTED))
@@ -274,11 +292,12 @@ class LogPanel:
 
 
 class Controls:
-    """Auto-cycle toggle, a one-cycle button, and a free-text action prompt.
+    """Auto-cycle toggle, a one-cycle button, an E-stop, and a free-text action prompt.
 
     The circular icon toggles the auto loop; switching it off lets the current cycle finish
     ("Shutting down..."). "Run" sorts exactly one brick and stops. The send button becomes an
-    immediate stop while an action runs. Esc / Space stop anything at once.
+    immediate stop while an action runs. STOP halts everything and is never disabled.
+    Esc / Space do the same. All of this is a software stop: the physical E-stop is the real one.
     """
 
     PROMPT = "Run action..."
@@ -304,6 +323,10 @@ class Controls:
                     .props("round unelevated size=md text-color=black")
                 self.reset = ui.button("Reset", icon="restart_alt", on_click=self._reset, color="grey-8") \
                     .props("unelevated").tooltip("Move the arm back to its home pose")
+                # Always visible and always enabled: an E-stop the operator never has to hunt for.
+                self.estop = ui.button("STOP", icon="pan_tool", on_click=self._estop, color="negative") \
+                    .props("unelevated size=lg").classes("px-6 font-bold") \
+                    .tooltip("Stop everything now and hold the arm (software stop)")
             self.kill = ui.button("Force kill", icon="dangerous", on_click=lambda: controller.stop(force=True),
                                   color="negative").props("unelevated")
             ui.label("Esc / Space = STOP · software stop only: keep the robot's physical E-stop in reach") \
@@ -337,6 +360,10 @@ class Controls:
         except Exception as error:
             self._on_error(str(error))
 
+    def _estop(self) -> None:
+        """Stop whatever is running at once. Safe to press when idle: stop() is then a no-op."""
+        self._controller.stop()
+
     def _reset(self) -> None:
         try:
             self._controller.reset()
@@ -367,6 +394,7 @@ class Controls:
         # Prompt: free only while idle; shows "Shutting down..." until the last auto cycle ends.
         self.prompt.set_enabled(idle)
         self.reset.set_enabled(idle)
+        self.estop.set_enabled(True)
         if status.auto and status.draining:
             self.prompt.set_value("")
             self.prompt.props(f'placeholder="{self.SHUTTING_DOWN}"')

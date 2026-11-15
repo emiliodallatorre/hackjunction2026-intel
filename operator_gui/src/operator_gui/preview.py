@@ -6,18 +6,24 @@ preview lives here rather than inside the runner: one holder of the camera at a 
 
 Frames go out as ``events.FRAME`` on the same pipe protocol the runner uses, so the dashboard's
 LiveView needs no changes.
+
+SIGUSR1 asks for one inspection of the current view: the station is already open here, so an
+on-demand analysis needs no second camera holder. The verdict is published as ``events.LOOK`` and
+``events.DECISION``, exactly as a cycle's inspection is, so the dashboard renders it unchanged.
 """
 
 import argparse
 import logging
 import signal
 import sys
+import threading
 import time
 from collections.abc import Sequence
 
 logger = logging.getLogger(__name__)
 
 PREVIEW_FPS = 10.0
+ANALYZE_SIGNAL = signal.SIGUSR1  # must match controller.ANALYZE_SIGNAL
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -27,10 +33,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="No camera: publish nothing, just idle")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     # SIGTERM is how the controller stops us; exit quietly so the camera is released at once.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
+    # Set by the signal handler, acted on between frames: inspect() must not run in a handler.
+    analyze = threading.Event()
+    signal.signal(ANALYZE_SIGNAL, lambda *_: analyze.set())
 
     if args.dry_run:
         signal.pause()
@@ -52,6 +61,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             while True:
                 started = time.monotonic()
                 station.camera.read()
+                if analyze.is_set():
+                    analyze.clear()
+                    # ObservedStation publishes the look and the decision as it inspects.
+                    try:
+                        decision = station.inspect()
+                        logger.info("Manual analysis: %s", decision.message)
+                    except Exception as error:  # noqa: BLE001
+                        logger.warning("Manual analysis failed: %s", error)
                 remaining = period - (time.monotonic() - started)
                 if remaining > 0:
                     time.sleep(remaining)

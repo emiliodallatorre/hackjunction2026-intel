@@ -11,6 +11,8 @@
 * While nothing is running, a ``preview`` child streams the inspection camera so the live view
   keeps moving when idle. The camera is an exclusive open, so the preview is always stopped
   before a runner starts and restarted once it exits.
+* ``analyze()`` asks that preview to inspect the current view once, which is why it works only
+  while idle: during a run the preview does not hold the camera.
 * ``stop()`` sends SIGINT, which run_model handles like Ctrl-C (the policy stops and the arm is
   told to hold its measured position); if the runner has not exited after STOP_GRACE_S it is
   terminated, then killed. ``stop(force=True)`` while stopping kills it at once.
@@ -34,6 +36,7 @@ from .history import DEFECTIVE, GOOD, History
 from .models import Model
 
 PREVIEW_GRACE_S = 3.0  # time for the preview to release the camera
+ANALYZE_SIGNAL = signal.SIGUSR1  # must match preview.ANALYZE_SIGNAL
 STOP_GRACE_S = 5.0  # time for the runtime to stop the policy, hold the arm and disconnect
 TERMINATE_GRACE_S = 2.0
 FINISH_SIGNAL = signal.SIGUSR1  # must match runner.FINISH_SIGNAL
@@ -207,6 +210,21 @@ class CycleController:
         threading.Thread(target=self._follow_preview, args=(preview, read_fd),
                          name="preview-events", daemon=True).start()
 
+    def analyze(self) -> None:
+        """Inspect the current camera view once, without moving the robot.
+
+        The idle preview already holds the station, so it does the analysis and publishes the
+        verdict like a cycle would. Raises if nothing is previewing.
+        """
+        with self._lock:
+            if self._process is not None:
+                raise RuntimeError("Something is already running")
+            preview = self._preview
+            if preview is None or preview.poll() is not None:
+                raise RuntimeError("The camera preview is not running, so there is nothing to analyse")
+            self._status.message = "Analysing the current view"
+        preview.send_signal(ANALYZE_SIGNAL)
+
     def stop_preview(self) -> None:
         """Stop the preview and wait for the camera to be released."""
         with self._lock:
@@ -227,14 +245,23 @@ class CycleController:
                     event = events.decode(line)
                 except ValueError:
                     continue
-                # Only frames: the preview must never touch stages, verdicts or history.
-                if event.get("type") == events.FRAME:
-                    with self._lock:
-                        if self._process is not None:
-                            continue  # a run started: its frames win
+                kind = event.get("type")
+                # Frames and on-demand inspection results only: the preview never drives stages,
+                # placements or history, so a manual analysis cannot be mistaken for a sorted brick.
+                if kind not in (events.FRAME, events.LOOK, events.DECISION):
+                    continue
+                with self._lock:
+                    if self._process is not None:
+                        continue  # a run started: its events win
+                    if kind == events.FRAME:
                         self._status.frame = event["jpeg"]
                         self._status.frame_seq += 1
                         self._status.preview_live = True
+                    elif kind == events.LOOK:
+                        self._status.look = event
+                    else:
+                        self._status.decision = event
+                        self._status.message = event["message"]
         preview.wait()
         with self._lock:
             self._status.preview_live = False

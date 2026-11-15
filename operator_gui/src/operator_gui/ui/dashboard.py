@@ -34,7 +34,8 @@ class Dashboard:
 
         with ui.element("div").classes("w-full max-w-[1600px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6"):
             with ui.column().classes("lg:col-span-2 gap-6"):
-                self.live = LiveView(controller.dry_run)
+                self.live = LiveView(controller.dry_run, controller,
+                                     on_error=lambda text: ui.notify(text, type="negative"))
                 self.message = ui.label().classes("text-lg font-medium")
                 self.log = LogPanel(controller)
             with ui.column().classes("gap-6"):
