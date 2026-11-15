@@ -12,8 +12,9 @@ import logging
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from math import isfinite
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .sorting import (
     BACKEND,
@@ -44,6 +45,10 @@ RESET_FPS = 30.0
 RESET_SKIP_TOLERANCE = 0.1
 # Abort and hold if a joint lags this fraction of the largest joint travel (a likely collision).
 RESET_MAX_TRACKING_ERROR = 0.15
+# SO-101 gripper positions are normalized to [0, 100], including in degree mode.
+GRIPPER_RELEASE_DELTA = 30.0
+GRIPPER_RELEASE_HOLD_S = 0.5
+GRIPPER_POLL_S = 0.1
 # Where `reset --save-home` stores the pose, so a later process can reset to it.
 DEFAULT_HOME_FILE = Path("home_pose.json")
 
@@ -162,12 +167,21 @@ class PolicyRunner:
                     time.sleep(remaining)
         logger.info("Reset complete; the arm is at its home pose")
 
-    def run_stage(self, task: str, *, duration_s: float, stop_event: StopSignal | None = None) -> None:
+    def run_stage(
+        self,
+        task: str,
+        *,
+        duration_s: float,
+        stop_event: StopSignal | None = None,
+        stop_event_factory: Callable[[Any], StopSignal] | None = None,
+    ) -> None:
         """Run ``task`` for ``duration_s``, or until ``stop_event`` is set, which counts as completion.
 
-        Without ``stop_event`` this is a timed stage that does not claim the manipulation succeeded.
+        Without either stop argument this is a timed stage that does not claim the manipulation succeeded.
         """
         _validate_duration(duration_s)
+        if stop_event is not None and stop_event_factory is not None:
+            raise ValueError("Pass either stop_event or stop_event_factory, not both")
 
         from physicalai.runtime import RobotRuntime
 
@@ -176,7 +190,7 @@ class PolicyRunner:
         if not isinstance(runtime, RobotRuntime):
             raise TypeError("Runtime configuration did not instantiate a RobotRuntime")
 
-        if stop_event is None:
+        if stop_event is None and stop_event_factory is None:
             logger.warning(
                 "Running timed task %r for %s control seconds; task success is NOT verified", task, duration_s
             )
@@ -186,6 +200,8 @@ class PolicyRunner:
             )
         with runtime:
             try:
+                if stop_event_factory is not None:
+                    stop_event = stop_event_factory(runtime.robot)
                 ticks = runtime.run(duration_s=duration_s, stop_event=stop_event, return_to_initial_state=False)
                 reason = runtime.last_run_reason
                 if reason == "interrupted":
@@ -212,6 +228,63 @@ class PolicyRunner:
         if watch.error is not None:
             raise RuntimeError("EMPTY check failed during presentation") from watch.error
         logger.info("Inspection not EMPTY for %s seconds; presentation complete", PRESENT_CONFIRM_S)
+
+
+class GripperReleaseWatch:
+    """Stops a placement stage after a sustained, substantial SO-101 gripper movement."""
+
+    def __init__(
+        self,
+        robot: Any,
+        *,
+        delta: float = GRIPPER_RELEASE_DELTA,
+        hold_s: float = GRIPPER_RELEASE_HOLD_S,
+        poll_s: float = GRIPPER_POLL_S,
+        clock: Callable[[], float] = time.monotonic,
+    ):
+        if delta <= 0 or not isfinite(delta):
+            raise ValueError(f"Gripper release delta must be finite and positive, got {delta}")
+        if hold_s < 0 or not isfinite(hold_s):
+            raise ValueError(f"Gripper release hold must be finite and nonnegative, got {hold_s}")
+        if poll_s <= 0 or not isfinite(poll_s):
+            raise ValueError(f"Gripper poll interval must be finite and positive, got {poll_s}")
+        joint_names = robot.joint_names
+        if "gripper" not in joint_names:
+            raise RuntimeError(f"Placement release check requires an SO-101 'gripper' joint, got {joint_names!r}")
+        self._robot = robot
+        self._index = joint_names.index("gripper")
+        self._delta = delta
+        self._hold_s = hold_s
+        self._poll_s = poll_s
+        self._clock = clock
+        self._initial = self._position()
+        self._next_poll = clock()
+        self._release_since: float | None = None
+        self.confirmed = False
+
+    def _position(self) -> float:
+        positions = self._robot.get_observation().joint_positions
+        if len(positions) <= self._index:
+            raise RuntimeError(f"SO-101 observation has no gripper position: expected index {self._index}")
+        position = float(positions[self._index])
+        if not isfinite(position):
+            raise RuntimeError(f"SO-101 gripper position is not finite: {position}")
+        return position
+
+    def is_set(self) -> bool:
+        if self.confirmed:
+            return True
+        now = self._clock()
+        if now < self._next_poll:
+            return False
+        self._next_poll = now + self._poll_s
+        if abs(self._position() - self._initial) >= self._delta:
+            self._release_since = now if self._release_since is None else self._release_since
+            if now - self._release_since >= self._hold_s:
+                self.confirmed = True
+        else:
+            self._release_since = None
+        return self.confirmed
 
 
 def run_task(runner: PolicyRunner, task: str, *, duration_s: float = DEFAULT_DURATION_S, repeat: int = 1) -> None:
@@ -267,7 +340,7 @@ def reset_robot(runner: PolicyRunner, *, home_file: Path | None = DEFAULT_HOME_F
 
 
 def run_cycle(runner: PolicyRunner) -> bool:
-    """Present a brick, inspect it, and place it in the matching dish. Returns True if defective."""
+    """Present, inspect, place, and reset. Returns True if defective."""
     for duration in (PRESENT_DURATION_S, GOOD_DURATION_S, BAD_DURATION_S):
         _validate_duration(duration)
 
@@ -275,6 +348,8 @@ def run_cycle(runner: PolicyRunner) -> bool:
 
     # Opened before any motion so a missing model or camera aborts the cycle up front.
     with InspectionStation() as station:
+        if runner.home_pose is None:
+            runner.capture_home_pose()
         logger.info("Moving the block to the inspection stage")
         runner.present(station)
         decision = station.inspect()
@@ -288,12 +363,17 @@ def run_cycle(runner: PolicyRunner) -> bool:
 
     if is_defective:
         logger.info("Inspection decision: defective; placing in the bad dish")
-        runner.run_stage(BAD_TASK, duration_s=BAD_DURATION_S)
+        task, duration_s = BAD_TASK, BAD_DURATION_S
     else:
         logger.info("Inspection decision: good; placing in the good dish")
-        runner.run_stage(GOOD_TASK, duration_s=GOOD_DURATION_S)
+        task, duration_s = GOOD_TASK, GOOD_DURATION_S
 
-    logger.warning("Cycle finished; the placement stage is timed and its outcome was not verified")
+    runner.run_stage(task, duration_s=duration_s, stop_event_factory=GripperReleaseWatch)
+    runner.reset()
+    logger.warning(
+        "Cycle finished; gripper release was detected and the arm returned to its captured home pose. "
+        "Dish placement itself was not visually verified"
+    )
     return is_defective
 
 

@@ -44,7 +44,9 @@ The script opens the inspection camera and anomaly model (`InspectionStation`, s
 
 1. Runs the single multi-task π0.5 model with the presentation instruction until inspection has been anything other than `EMPTY` continuously for `PRESENT_CONFIRM_S` (3 seconds); the robot then holds the brick in place. The check uses the same `EMPTY` rule as the inspection but skips the anomaly model, so it does not slow the policy. If that does not happen within `PRESENT_DURATION_S`, the cycle aborts
 2. Inspects the brick with the anomaly model. `DEFECTIVE` and `GOOD` pick the placement; no brick (`EMPTY`) or an uncertain score (`ROTATE`) aborts the cycle, since there is no rotate stage
-3. Closes the inspection camera and runs the same model with the corresponding placement instruction for its configured duration. Placement is still timed: elapsed duration does not establish that the brick was released correctly
+3. Closes the inspection camera and runs the same model with the corresponding placement instruction until the SO-101 gripper moves at least 30 normalized points from its starting position for 0.5 seconds. The configured placement duration is a timeout; if release is not detected, the cycle aborts
+
+After release is detected, the arm returns to the pose captured before the first cycle. Repeated cycles reuse that pose, so the next presentation does not start over the previous dish. The gripper movement is a release signal, not visual confirmation that the brick landed in the correct dish.
 
 The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): without it the model never reports `EMPTY`, so the cycle aborts before moving. The config comes from `$BRICK_AD_CONFIG`, else `anomaly_detection/config.yaml`, with the model at `anomaly_detection/models/patchcore/`. The model is versioned with Git LFS: run `git lfs install` before cloning, or `git lfs pull` afterwards. [docker-compose.yml](infra/docker-compose.yml) mounts both into the Studio container at `/brick` and sets `BRICK_AD_CONFIG`.
 
@@ -52,7 +54,7 @@ The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): w
 
 From the Mac, [run-inspection-demo.sh](scripts/run-inspection-demo.sh) connects to roberta and runs only the presentation and inspection stages. It uses `~/Downloads/pi05-ricotta-runtime` on roberta by default and saves the report to `~/Downloads/inspection.png`. Set `ROBERTA_HOST` or `EXPORT` to override the host or a directory/zip under roberta's Downloads; pass `--present-timeout` to override the default 45 seconds.
 
-For the full presentation, inspection, and dish placement cycle, run [run-sorting.sh](scripts/run-sorting.sh) from the Mac. It uses the same host and export defaults and sets the presentation timeout to 45 seconds; the selected placement runs for 45 control seconds without verifying completion. `scripts/run-sorting.sh --dry-run` logs random routing without connecting to hardware.
+For the full presentation, inspection, and dish placement cycle, run [run-sorting.sh](scripts/run-sorting.sh) from the Mac. It uses the same host and export defaults and sets the presentation and placement timeouts to 45 seconds. Placement stops early when gripper release is detected. `scripts/run-sorting.sh --dry-run` logs random routing without connecting to hardware.
 
 Both scripts command the robot during a normal run. Before running them, stop competing Studio sessions, put the brick at its demonstrated starting position, clear the inspection area, and supervise the arm.
 
@@ -67,7 +69,7 @@ The task instructions in [sorting.py](src/hackjunction2026_intel/sorting.py) mat
 Before using hardware:
 
 - If using a different dataset, update the task instructions to match its demonstrations
-- Set `PRESENT_DURATION_S` (presentation timeout), `GOOD_DURATION_S`, and `BAD_DURATION_S` (placement durations) to positive, supervised-test values; zero prevents motion
+- Set `PRESENT_DURATION_S` (presentation timeout), `GOOD_DURATION_S`, and `BAD_DURATION_S` (placement timeouts) to positive, supervised-test values; zero prevents motion
 - Set the inspection camera source in `anomaly_detection/config.yaml`, and keep that camera out of the export's `runtime.yaml`: only the inspection code may open it
 - Check the export's `runtime.yaml` for the serial port, robot calibration, camera identities/names/settings, control rate, and any safety callbacks; lines marked `# CHANGE_ME` contain machine-specific device paths
 - Ensure presentation ends in a state compatible with both placement instructions
@@ -78,7 +80,7 @@ Each stage creates a fresh runtime from the same export, whose policy source res
 
 Runtime errors, early stops, and Ctrl+C abort the cycle rather than advancing to inspection or placement. Hold and cleanup are software requests, not guaranteed physical stopping or an emergency stop. Stop competing Studio sessions before running the standalone script.
 
-Durations and the presentation timeout use the SDK's control-loop timing, not a hard wall-clock watchdog; slow inference can extend real elapsed time. Model loading is also outside the timed run, while the 3-second `EMPTY` check runs on wall-clock time from just before the policy loads. Supervise the demo and retain a physical emergency stop. Replace the timed placement with a verified completion check before autonomous use.
+Durations and the presentation timeout use the SDK's control-loop timing, not a hard wall-clock watchdog; slow inference can extend real elapsed time. Model loading is also outside the timed run, while the 3-second `EMPTY` check runs on wall-clock time from just before the policy loads. The placement release check is a gripper-motion heuristic and does not verify dish occupancy or placement accuracy. Validate it under supervision and retain a physical emergency stop; unattended operation requires a sensor that verifies the brick in the target dish.
 
 ### Tests
 

@@ -28,7 +28,14 @@ class DryRunner:
         logger.info("DRY RUN: resetting the arm to its home pose; no robot commands")
         time.sleep(STAGE_S)
 
-    def run_stage(self, task: str, *, duration_s: float, stop_event: Any = None) -> None:
+    def run_stage(
+        self,
+        task: str,
+        *,
+        duration_s: float,
+        stop_event: Any = None,
+        stop_event_factory: Any = None,
+    ) -> None:
         logger.info("DRY RUN: task %r (configured %s s); no robot commands", task, duration_s)
         time.sleep(STAGE_S)
 
