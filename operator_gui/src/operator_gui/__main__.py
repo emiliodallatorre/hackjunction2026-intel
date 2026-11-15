@@ -60,6 +60,8 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     controller = CycleController(source_args, History(args.history), action_duration_s=args.action_duration,
                                  home_file=args.home.resolve() if args.home else None)
+    if models:
+        controller.set_models(models)  # fills the header's model picker; keeps models[0] selected
     register(controller)
     # Stream the inspection camera while idle; a run takes the camera over and gives it back.
     app.on_startup(controller.start_preview)

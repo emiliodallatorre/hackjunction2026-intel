@@ -72,6 +72,7 @@ class ModelPicker:
         current = controller.model
         with ui.row().classes("items-center gap-2 no-wrap"):
             ui.icon("smart_toy", size="20px").classes("muted")
+            ui.label("Model").classes("caption")
             if controller.dry_run:
                 self.select = None
                 ui.label("dry run").classes("mono muted")
@@ -82,7 +83,7 @@ class ModelPicker:
                 self.select = ui.select(
                     list(self._by_label), value=current.label if current else None,
                     on_change=self._choose,
-                ).props("outlined dark dense options-dense").classes("mono min-w-[260px]") \
+                ).props("outlined dark dense options-dense").classes("mono grow max-w-[520px]") \
                     .tooltip("Studio OpenVINO export the next run uses")
 
     def _choose(self, event: Any) -> None:

@@ -28,7 +28,6 @@ class Dashboard:
                 ui.label("operator").classes("mono muted")
             self.stepper = Stepper()
             with ui.row().classes("items-center gap-3"):
-                self.picker = ModelPicker(controller, on_error=lambda text: ui.notify(text, type="negative"))
                 mode = "DRY RUN" if controller.dry_run else "ROBOT"
                 ui.label(mode).classes("pill").style(theme.pill_style(theme.ACCENT if controller.dry_run else theme.GOOD))
                 self.pill = StatusPill()
@@ -46,7 +45,9 @@ class Dashboard:
 
         with ui.footer().classes("px-6 py-4").style(
                 f"background: {theme.PANEL}; border-top: 1px solid {theme.BORDER}"):
-            self.controls = Controls(controller, on_error=lambda text: ui.notify(text, type="negative"))
+            with ui.column().classes("w-full gap-3"):
+                self.picker = ModelPicker(controller, on_error=lambda text: ui.notify(text, type="negative"))
+                self.controls = Controls(controller, on_error=lambda text: ui.notify(text, type="negative"))
 
         self.panels = (self.stepper, self.pill, self.live, self.verdict, self.kpis, self.table, self.log,
                        self.controls, self.picker)
