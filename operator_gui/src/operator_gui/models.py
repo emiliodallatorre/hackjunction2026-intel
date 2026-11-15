@@ -35,7 +35,13 @@ class Model:
 
 
 def _is_export_folder(path: Path) -> bool:
-    return (path / "runtime.yaml").is_file() and (path / "exports" / BACKEND).is_dir()
+    has_yaml = (path / "runtime.yaml").is_file()
+    has_weights = (path / "exports" / BACKEND).is_dir()
+    if has_yaml or has_weights:  # looks like an attempt at an export: say why it was rejected
+        logger.info("  %s: runtime.yaml=%s exports/%s/=%s -> %s",
+                    path, has_yaml, BACKEND, has_weights,
+                    "ACCEPTED" if (has_yaml and has_weights) else "rejected")
+    return has_yaml and has_weights
 
 
 def _is_export_zip(path: Path) -> bool:
@@ -44,16 +50,27 @@ def _is_export_zip(path: Path) -> bool:
     try:
         with zipfile.ZipFile(path) as archive:
             names = archive.namelist()
-    except (zipfile.BadZipFile, OSError):
+    except (zipfile.BadZipFile, OSError) as error:
+        logger.info("  %s: not readable as a zip (%s)", path, error)
         return False
     # Accept both a flat export and one wrapped in a single top-level folder.
-    return any(n.endswith("runtime.yaml") for n in names) and any(f"exports/{BACKEND}/" in n for n in names)
+    has_yaml = any(n.endswith("runtime.yaml") for n in names)
+    has_weights = any(f"exports/{BACKEND}/" in n for n in names)
+    logger.info("  %s: runtime.yaml=%s exports/%s/=%s -> %s",
+                path, has_yaml, BACKEND, has_weights,
+                "ACCEPTED" if (has_yaml and has_weights) else "rejected")
+    return has_yaml and has_weights
 
 
 def discover(extra: Path | None = None) -> list[Model]:
     """Every runnable export found, best candidate first. ``extra`` is always included if valid."""
     found: list[Model] = []
     seen: set[Path] = set()
+    logger.info("Export discovery starting")
+    logger.info("  home=%s cwd=%s", Path.home(), Path.cwd())
+    logger.info("  search dirs: %s", [str(d) for d in SEARCH_DIRS])
+    for directory in SEARCH_DIRS:
+        logger.info("  %s exists=%s", directory, directory.is_dir())
 
     def add(path: Path, kind: str) -> None:
         resolved = path.resolve()
@@ -72,14 +89,18 @@ def discover(extra: Path | None = None) -> list[Model]:
 
     for directory in SEARCH_DIRS:
         if not directory.is_dir():
+            logger.info("Skipping %s: not a directory", directory)
             continue
-        for candidate in sorted(directory.iterdir()):
+        entries = sorted(directory.iterdir())
+        logger.info("Scanning %s (%d entries)", directory, len(entries))
+        for candidate in entries:
             try:
                 if candidate.is_dir() and _is_export_folder(candidate):
                     add(candidate, "folder")
                 elif _is_export_zip(candidate):
                     add(candidate, "zip")
-            except OSError:
+            except OSError as error:
+                logger.info("  %s: unreadable (%s)", candidate, error)
                 continue
         # One level deeper, so an export inside e.g. ~/Downloads/models/ is still found.
         if SEARCH_DEPTH > 1:
@@ -92,6 +113,8 @@ def discover(extra: Path | None = None) -> list[Model]:
                             add(candidate, "folder")
                         elif _is_export_zip(candidate):
                             add(candidate, "zip")
-                except OSError:
+                except OSError as error:
+                    logger.info("  %s: unreadable (%s)", sub, error)
                     continue
+    logger.info("Export discovery finished: %d found %s", len(found), [m.name for m in found])
     return found

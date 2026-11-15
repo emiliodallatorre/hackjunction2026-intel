@@ -9,6 +9,7 @@ on the first one; the header's picker switches between them while idle.
 """
 
 import argparse
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -36,6 +37,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.export is not None and not args.export.exists():
         parser.error(f"export not found: {args.export}")
+
+    # Dashboard-side logging: the runner child configures its own.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     from .models import discover
 
