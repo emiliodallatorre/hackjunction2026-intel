@@ -324,9 +324,8 @@ class Controls:
                 self.reset = ui.button("Reset", icon="restart_alt", on_click=self._reset, color="grey-8") \
                     .props("unelevated").tooltip("Move the arm back to its home pose")
                 # Always visible and always enabled: an E-stop the operator never has to hunt for.
-                self.estop = ui.button("STOP", icon="pan_tool", on_click=self._estop, color="negative") \
-                    .props("unelevated size=lg").classes("px-6 font-bold") \
-                    .tooltip("Stop everything now and hold the arm (software stop)")
+                self.estop = ui.button(icon="pan_tool", on_click=self._estop, color="negative") \
+                    .props("unelevated").tooltip("Stop everything now and hold the arm (software stop)")
             self.kill = ui.button("Force kill", icon="dangerous", on_click=lambda: controller.stop(force=True),
                                   color="negative").props("unelevated")
             ui.label("Esc / Space = STOP · software stop only: keep the robot's physical E-stop in reach") \
