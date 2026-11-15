@@ -121,6 +121,39 @@ class RunPolicyTests(unittest.TestCase):
                 self.runtime.robot.send_action.assert_called_once()
                 self.runtime.__exit__.assert_called_once()
 
+    def test_presentation_starts_presence_checks_after_first_control_tick(self) -> None:
+        original_start = sorting.threading.Thread.start
+        for entrypoint in ("inspection-demo", "policy-runner"):
+            with self.subTest(entrypoint=entrypoint):
+                station = MagicMock()
+                station.is_empty.return_value = False
+                self.runtime.reset_mock()
+                self.runtime.last_run_reason = "stop_requested"
+                with patch.object(sorting, "PRESENT_CONFIRM_S", 0), \
+                        patch.object(run_model, "PRESENT_CONFIRM_S", 0), \
+                        patch.object(sorting.threading.Thread, "start", autospec=True,
+                                     side_effect=original_start) as start:
+                    def first_tick(*, stop_event, **kwargs):
+                        start.assert_not_called()
+                        station.is_empty.assert_not_called()
+                        self.assertFalse(stop_event.is_set())
+                        start.assert_not_called()
+                        self.runtime.robot.send_action([0.0])
+                        stop_event.is_set()
+                        stop_event._thread.join(timeout=5)
+                        self.assertTrue(stop_event.confirmed.is_set())
+                        self.assertIsNone(stop_event.error)
+                        return 1
+
+                    self.runtime.run.side_effect = first_tick
+                    if entrypoint == "inspection-demo":
+                        sorting.present_block(self.export, station)
+                    else:
+                        runner = run_model.PolicyRunner.__new__(run_model.PolicyRunner)
+                        runner._runtime = self.runtime
+                        runner.present(station)
+                    start.assert_called_once()
+
     def test_inference_failure_still_requests_hold_and_disconnects(self) -> None:
         self.runtime.run.side_effect = ConnectionError("camera lost")
         with self.assertRaisesRegex(ConnectionError, "camera lost"):
@@ -181,6 +214,18 @@ def fake_anomaly_detection(station: object | None = None) -> ModuleType:
 
 
 class PresenceWatchTests(unittest.TestCase):
+    def test_deferred_watch_cleans_up_when_runtime_never_completes_first_tick(self) -> None:
+        for first_poll in (False, True):
+            with self.subTest(first_poll=first_poll):
+                check = Mock(return_value=True)
+                watch = sorting.PresenceWatch(check, 0, after_first_tick=True)
+                with watch:
+                    if first_poll:
+                        self.assertFalse(watch.is_set())
+                check.assert_not_called()
+                self.assertFalse(watch._thread.is_alive())
+                self.assertFalse(watch.is_set())
+
     def test_confirms_only_after_continuous_presence(self) -> None:
         # One clock second per present reading; the absent reading restarts the count.
         readings = iter([True, True, True, False, True, True, True, True])
@@ -237,6 +282,8 @@ class InspectionTests(unittest.TestCase):
 
                 def run_until_stop(export, task, *, duration_s, stop_event) -> None:
                     seen.update(export=export, task=task, duration_s=duration_s)
+                    self.assertFalse(stop_event.is_set())
+                    stop_event.is_set()
                     stop_event._thread.join(timeout=0.2)
                     seen["completed"] = stop_event.is_set()
 
@@ -257,6 +304,8 @@ class InspectionTests(unittest.TestCase):
         self.station.is_empty.side_effect = OSError("camera lost")
 
         def wait_for_watch(*args, stop_event, **kwargs) -> None:
+            self.assertFalse(stop_event.is_set())
+            stop_event.is_set()
             stop_event._thread.join(timeout=5)
 
         with patch.object(sorting, "run_policy", side_effect=wait_for_watch):
