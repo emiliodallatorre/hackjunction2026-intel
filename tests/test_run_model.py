@@ -40,6 +40,30 @@ class ReleaseWatchTests(unittest.TestCase):
         self.assertTrue(watch.is_set())
         self.assertTrue(watch.is_set())
 
+    def test_default_threshold_requires_15_points_for_half_a_second(self) -> None:
+        for direction in (-1, 1):
+            with self.subTest(direction=direction):
+                now = [0.0]
+                position = [25.0]
+                robot = SimpleNamespace(
+                    joint_names=["shoulder_pan", "gripper"],
+                    get_observation=lambda: SimpleNamespace(joint_positions=[0.0, position[0]]),
+                )
+                watch = run_model.GripperReleaseWatch(robot, clock=lambda: now[0])
+
+                self.assertFalse(watch.is_set())
+                position[0] = 25.0 + direction * 14.9
+                now[0] = 0.125
+                self.assertFalse(watch.is_set())
+                position[0] = 25.0 + direction * 15.0
+                now[0] = 0.25
+                self.assertFalse(watch.is_set())
+                now[0] = 0.5
+                self.assertFalse(watch.is_set())
+                now[0] = 0.75
+                self.assertTrue(watch.is_set())
+                self.assertTrue(watch.is_set())
+
     def test_requires_named_gripper_and_finite_observation(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "SO-101 'gripper' joint"):
             run_model.GripperReleaseWatch(SimpleNamespace(joint_names=["finger"], get_observation=Mock()))
@@ -219,7 +243,7 @@ class RunStageTests(unittest.TestCase):
                 runner.run_stage(
                     "place", duration_s=1,
                     stop_event_factory=lambda connected: run_model.GripperReleaseWatch(
-                        connected, clock=lambda: now[0]
+                        connected, delta=30, clock=lambda: now[0]
                     ),
                 )
 

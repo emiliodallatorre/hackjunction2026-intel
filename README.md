@@ -44,9 +44,9 @@ The script opens the inspection camera and anomaly model (`InspectionStation`, s
 
 1. Runs the single multi-task π0.5 model with the presentation instruction until inspection has been anything other than `EMPTY` continuously for `PRESENT_CONFIRM_S` (3 seconds); the robot then holds the brick in place. The check uses the same `EMPTY` rule as the inspection but skips the anomaly model, so it does not slow the policy. If that does not happen within `PRESENT_DURATION_S`, the cycle aborts
 2. Inspects the brick with the anomaly model. `DEFECTIVE` and `GOOD` pick the placement; no brick (`EMPTY`) or an uncertain score (`ROTATE`) logs a warning and defaults to the defective dish in the standalone sorting script, even if no brick is present. The GUI and `run_model cycle` still abort on inconclusive results
-3. Closes the inspection camera and runs the same model with the corresponding placement instruction until the SO-101 gripper moves at least 30 normalized points from its starting position for 0.5 seconds. The configured placement duration is a timeout; if release is not detected, the cycle aborts
+3. Closes the inspection camera and runs the same model with the corresponding placement instruction until the SO-101 gripper moves at least 15 normalized points in either direction from its starting position for 0.5 seconds. The configured placement duration is a timeout; if the movement is not detected, the cycle aborts
 
-After release is detected, the arm returns to the pose captured before the first cycle. Repeated cycles reuse that pose, so the next presentation does not start over the previous dish. The gripper movement is a release signal, not visual confirmation that the brick landed in the correct dish.
+After the movement is detected, the arm returns to the pose captured before the first cycle. Repeated cycles reuse that pose, so the next presentation does not start over the previous dish. This is an experimental heuristic: gripping the brick can trigger it before the arm reaches the dish, and it does not visually verify release or placement. Supervise the arm and keep a physical stop ready.
 
 During placement, the release check logs the initial gripper position, sampled positions and timing, and a summary when the stage ends or is interrupted. These diagnostics use the existing gripper observations and do not change the completion condition.
 
@@ -56,7 +56,7 @@ The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): w
 
 From the Mac, [run-inspection-demo.sh](scripts/run-inspection-demo.sh) connects to roberta and runs only the presentation and inspection stages. It uses `~/Downloads/pi05-ricotta-runtime` on roberta by default and saves the report to `~/Downloads/inspection.png`. Set `ROBERTA_HOST` or `EXPORT` to override the host or a directory/zip under roberta's Downloads; pass `--present-timeout` to override the default 45 seconds.
 
-For the full presentation, inspection, and dish placement cycle, run [run-sorting.sh](scripts/run-sorting.sh) from the Mac. It uses the same host and export defaults and sets the presentation and placement timeouts to 45 seconds. Placement stops early when gripper release is detected. `scripts/run-sorting.sh --dry-run` logs random routing without connecting to hardware.
+For the full presentation, inspection, and dish placement cycle, run [run-sorting.sh](scripts/run-sorting.sh) from the Mac. It uses the same host and export defaults and sets the presentation and placement timeouts to 45 seconds. Placement stops early when the gripper movement heuristic passes. `scripts/run-sorting.sh --dry-run` logs random routing without connecting to hardware.
 
 Both scripts command the robot during a normal run. Before running them, stop competing Studio sessions, put the brick at its demonstrated starting position, clear the inspection area, and supervise the arm.
 

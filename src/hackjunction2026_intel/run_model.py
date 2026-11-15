@@ -47,7 +47,7 @@ RESET_SKIP_TOLERANCE = 0.1
 # Abort and hold if a joint lags this fraction of the largest joint travel (a likely collision).
 RESET_MAX_TRACKING_ERROR = 0.15
 # SO-101 gripper positions are normalized to [0, 100], including in degree mode.
-GRIPPER_RELEASE_DELTA = 30.0
+GRIPPER_RELEASE_DELTA = 15.0
 GRIPPER_RELEASE_HOLD_S = 0.5
 GRIPPER_POLL_S = 0.1
 GRIPPER_LOG_INTERVAL_S = 1.0
@@ -325,6 +325,9 @@ class GripperReleaseWatch:
             "Gripper release check started: initial=%.2f threshold=%.2f hold=%.2fs min_poll_interval=%.2fs",
             self._initial, self._delta, self._hold_s, self._poll_s,
         )
+        logger.warning(
+            "Gripper movement in either direction can stop placement before the brick reaches the dish"
+        )
 
     def _position(self) -> float:
         positions = self._robot.get_observation().joint_positions
@@ -473,8 +476,8 @@ def run_cycle(runner: PolicyRunner, *, inconclusive_as_defective: bool = False) 
     runner.run_stage(task, duration_s=duration_s, stop_event_factory=GripperReleaseWatch)
     runner.reset()
     logger.warning(
-        "Cycle finished; gripper release was detected and the arm returned to its captured home pose. "
-        "Dish placement itself was not visually verified"
+        "Cycle finished; gripper movement triggered the completion check and the arm returned to its "
+        "captured home pose. Release and dish placement were not verified"
     )
     return is_defective
 
