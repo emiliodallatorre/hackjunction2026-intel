@@ -45,7 +45,11 @@ RESET_FPS = 30.0
 # Skip the move when every joint is already within this fraction of the pose's magnitude.
 RESET_SKIP_TOLERANCE = 0.1
 # Abort and hold if a joint lags this fraction of the largest joint travel (a likely collision).
-RESET_MAX_TRACKING_ERROR = 0.15
+RESET_MAX_TRACKING_ERROR = 0.30
+# Hold still this long before reading the start pose, so motion left over from the policy settles.
+RESET_SETTLE_S = 0.5
+# Skip the tracking check for the first steps, while servos (e.g. gravity-loaded shoulder) start moving.
+RESET_GRACE_STEPS = 10
 # SO-101 gripper positions are normalized to [0, 100], including in degree mode.
 GRIPPER_RELEASE_DELTA = 15.0
 GRIPPER_RELEASE_HOLD_S = 0.5
@@ -190,6 +194,8 @@ class PolicyRunner:
         steps = max(int(RESET_DURATION_S * RESET_FPS), 1)
         goal_time = RESET_DURATION_S / steps
         with self._connected_robot() as robot:
+            robot.send_action(robot.get_observation().joint_positions)
+            time.sleep(RESET_SETTLE_S)
             current = robot.get_observation().joint_positions
             if target.shape != current.shape:
                 raise ValueError(f"Pose has {target.shape} joints, robot reports {current.shape}")
@@ -208,7 +214,7 @@ class PolicyRunner:
                 measured = robot.get_observation().joint_positions
                 error = np.abs(measured - command) / max(travel, 1e-8)
                 worst = int(np.argmax(error))
-                if error[worst] > RESET_MAX_TRACKING_ERROR:
+                if step > RESET_GRACE_STEPS and error[worst] > RESET_MAX_TRACKING_ERROR:
                     robot.send_action(measured)
                     raise RuntimeError(
                         f"Reset aborted at step {step}/{steps}: joint "
