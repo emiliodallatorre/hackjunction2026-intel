@@ -32,7 +32,7 @@ PRESENT_CONFIRM_S = 3.0
 PRESENCE_POLL_S = 0.1
 
 # TODO: Set supervised, validated durations in seconds; zero disables execution.
-PRESENT_DURATION_S = 15.0
+PRESENT_DURATION_S = 30.0
 GOOD_DURATION_S = 15.0
 BAD_DURATION_S = 15.0
 
