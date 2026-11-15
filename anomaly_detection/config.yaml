@@ -47,9 +47,12 @@ train:
 
 inference:
   device: CPU           # OpenVINO device: CPU, GPU, NPU or AUTO
-  # Scores within this distance of the threshold (0.5) are flagged uncertain,
+  # Anomaly when score >= threshold. null = the threshold learned in training (0.5 on the
+  # normalised scale). Read when the station / brick-ad command starts: restart to apply.
+  threshold: null
+  # Scores within this distance of the threshold are flagged uncertain,
   # e.g. to rotate the brick and look again before sorting.
-  uncertain_margin: 0.1
+  uncertain_margin: 0
 
 paths:
   raw: data/raw              # full camera frames: raw/good, raw/anomaly, raw/empty

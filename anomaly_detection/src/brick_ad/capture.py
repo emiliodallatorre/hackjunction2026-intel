@@ -32,7 +32,7 @@ def stream(cfg: Config, model_dir: Path | None = None, heatmap: bool = False) ->
     if model_dir is not None:
         from hackjunction2026_intel.anomaly_detection.inspector import BrickInspector
 
-        inspector = BrickInspector(model_dir, device=cfg.inference.device,
+        inspector = BrickInspector(model_dir, device=cfg.inference.device, threshold=cfg.inference.threshold,
                                    uncertain_margin=cfg.inference.uncertain_margin)
         roi = inspector.roi  # always show the ROI the model was trained with
         if inspector.presence is None:
