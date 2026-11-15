@@ -50,6 +50,7 @@ RESET_MAX_TRACKING_ERROR = 0.15
 GRIPPER_RELEASE_DELTA = 30.0
 GRIPPER_RELEASE_HOLD_S = 0.5
 GRIPPER_POLL_S = 0.1
+GRIPPER_LOG_INTERVAL_S = 1.0
 # Where `reset --save-home` stores the pose, so a later process can reset to it.
 DEFAULT_HOME_FILE = Path("home_pose.json")
 
@@ -260,8 +261,12 @@ class PolicyRunner:
                 raise RuntimeError(f"Policy stage {task!r} did not complete within {duration_s} s: {reason}")
         finally:
             # Cancel any remaining position target; the robot stays connected for the next stage.
-            measured = runtime.robot.get_observation()
-            runtime.robot.send_action(measured.joint_positions)
+            try:
+                measured = runtime.robot.get_observation()
+                runtime.robot.send_action(measured.joint_positions)
+            finally:
+                if isinstance(stop_event, GripperReleaseWatch):
+                    stop_event.log_summary(runtime.last_run_reason)
 
     def present(self, station: Any) -> None:
         """Run the presentation task until inspection has not been EMPTY for PRESENT_CONFIRM_S."""
@@ -306,8 +311,20 @@ class GripperReleaseWatch:
         self._clock = clock
         self._initial = self._position()
         self._next_poll = clock()
+        self._started_at = self._next_poll
+        self._last_poll = self._started_at
+        self._next_log = self._started_at
+        self._last_position = self._initial
+        self._min_position = self._max_position = self._initial
+        self._recent_min = self._recent_max = self._initial
+        self._max_poll_gap = 0.0
+        self._poll_count = 0
         self._release_since: float | None = None
         self.confirmed = False
+        logger.info(
+            "Gripper release check started: initial=%.2f threshold=%.2f hold=%.2fs min_poll_interval=%.2fs",
+            self._initial, self._delta, self._hold_s, self._poll_s,
+        )
 
     def _position(self) -> float:
         positions = self._robot.get_observation().joint_positions
@@ -325,13 +342,48 @@ class GripperReleaseWatch:
         if now < self._next_poll:
             return False
         self._next_poll = now + self._poll_s
-        if abs(self._position() - self._initial) >= self._delta:
+        position = self._position()
+        self._max_poll_gap = max(self._max_poll_gap, now - self._last_poll)
+        self._last_poll = now
+        self._last_position = position
+        self._min_position = min(self._min_position, position)
+        self._max_position = max(self._max_position, position)
+        self._recent_min = min(self._recent_min, position)
+        self._recent_max = max(self._recent_max, position)
+        self._poll_count += 1
+        delta = position - self._initial
+        was_above = self._release_since is not None
+        above = abs(delta) >= self._delta
+        if above:
             self._release_since = now if self._release_since is None else self._release_since
             if now - self._release_since >= self._hold_s:
                 self.confirmed = True
         else:
             self._release_since = None
+        if now >= self._next_log or above != was_above or self.confirmed:
+            above_for = now - self._release_since if self._release_since is not None else 0.0
+            logger.info(
+                "Gripper release check: elapsed=%.2fs position=%.2f delta=%+.2f "
+                "recent_min=%.2f recent_max=%.2f above_threshold=%s above_for=%.2fs max_poll_gap=%.2fs",
+                now - self._started_at, position, delta, self._recent_min, self._recent_max,
+                above, above_for, self._max_poll_gap,
+            )
+            self._next_log = now + GRIPPER_LOG_INTERVAL_S
+            self._recent_min = self._recent_max = position
         return self.confirmed
+
+    def log_summary(self, runtime_reason: str | None) -> None:
+        """Report observed gripper values without taking another robot reading."""
+        now = self._clock()
+        max_delta = max(abs(self._min_position - self._initial), abs(self._max_position - self._initial))
+        logger.info(
+            "Gripper release check summary: runtime_reason=%s elapsed=%.2fs initial=%.2f last=%.2f "
+            "min=%.2f max=%.2f max_abs_delta=%.2f polls=%d max_poll_gap=%.2fs "
+            "since_last_poll=%.2fs confirmed=%s",
+            runtime_reason, now - self._started_at, self._initial, self._last_position,
+            self._min_position, self._max_position, max_delta, self._poll_count, self._max_poll_gap,
+            now - self._last_poll, self.confirmed,
+        )
 
 
 def run_task(runner: PolicyRunner, task: str, *, duration_s: float = DEFAULT_DURATION_S, repeat: int = 1) -> None:

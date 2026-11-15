@@ -191,5 +191,47 @@ class RunStageTests(unittest.TestCase):
         self.assertIs(runtime.assert_signal, signal)
         runtime.robot.send_action.assert_called_once_with(runtime.robot.get_observation().joint_positions)
 
+    def test_release_diagnostics_on_interrupt_use_existing_observations(self) -> None:
+        now = [0.0]
+        position = [20.0]
+        robot = SimpleNamespace(
+            joint_names=["gripper"],
+            get_observation=Mock(side_effect=lambda: SimpleNamespace(joint_positions=[position[0]])),
+            send_action=Mock(),
+        )
+
+        def run(**kwargs):
+            watch = kwargs["stop_event"]
+            for timestamp, value in (
+                (0.0, 20.0), (0.2, 45.0), (0.5, 65.0), (0.8, 35.0), (1.1, 49.0), (1.9, 30.0),
+            ):
+                now[0], position[0] = timestamp, value
+                self.assertFalse(watch.is_set())
+            now[0] = 2.5
+            return 6
+
+        runner = run_model.PolicyRunner.__new__(run_model.PolicyRunner)
+        runner._runtime = SimpleNamespace(
+            robot=robot, action_source=SimpleNamespace(set_task=Mock()), run=run, last_run_reason="interrupted",
+        )
+        with self.assertLogs(run_model.logger, level="INFO") as logs:
+            with self.assertRaises(KeyboardInterrupt):
+                runner.run_stage(
+                    "place", duration_s=1,
+                    stop_event_factory=lambda connected: run_model.GripperReleaseWatch(
+                        connected, clock=lambda: now[0]
+                    ),
+                )
+
+        output = "\n".join(logs.output)
+        self.assertIn("initial=20.00 threshold=30.00", output)
+        self.assertIn("position=65.00 delta=+45.00", output)
+        self.assertIn("position=30.00 delta=+10.00 recent_min=30.00 recent_max=49.00", output)
+        self.assertIn("runtime_reason=interrupted", output)
+        self.assertIn("min=20.00 max=65.00 max_abs_delta=45.00 polls=6 max_poll_gap=0.80s", output)
+        self.assertIn("since_last_poll=0.60s confirmed=False", output)
+        self.assertEqual(robot.get_observation.call_count, 8)
+        robot.send_action.assert_called_once_with([30.0])
+
 if __name__ == "__main__":
     unittest.main()
