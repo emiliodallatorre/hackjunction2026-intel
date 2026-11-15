@@ -289,7 +289,12 @@ class PolicyRunner:
 
 
 class GripperReleaseWatch:
-    """Stops a placement stage after a sustained, substantial SO-101 gripper movement."""
+    """Stops a placement stage once the SO-101 gripper grasps and then releases.
+
+    SO-101 gripper positions grow as the claw opens. A grasp is a close of at least ``delta`` below the
+    highest position seen; opening to pick up the brick therefore never counts. The release is a later
+    sustained opening of at least ``delta`` above the lowest position since the grasp.
+    """
 
     def __init__(
         self,
@@ -326,13 +331,16 @@ class GripperReleaseWatch:
         self._max_poll_gap = 0.0
         self._poll_count = 0
         self._release_since: float | None = None
+        self._peak = self._initial
+        self._trough: float | None = None
         self.confirmed = False
         logger.info(
-            "Gripper release check started: initial=%.2f threshold=%.2f hold=%.2fs min_poll_interval=%.2fs",
+            "Gripper release check started: initial=%.2f threshold=%.2f hold=%.2fs min_poll_interval=%.2fs "
+            "(waiting for grasp, then release)",
             self._initial, self._delta, self._hold_s, self._poll_s,
         )
         logger.warning(
-            "Gripper movement in either direction can stop placement before the brick reaches the dish"
+            "Release is inferred from gripper motion only; a regrasp can stop placement before the dish"
         )
 
     def _position(self) -> float:
@@ -362,7 +370,18 @@ class GripperReleaseWatch:
         self._poll_count += 1
         delta = position - self._initial
         was_above = self._release_since is not None
-        above = abs(delta) >= self._delta
+        if self._trough is None:
+            self._peak = max(self._peak, position)
+            if self._peak - position >= self._delta:
+                self._trough = position
+                logger.info(
+                    "Gripper grasp detected: position=%.2f peak=%.2f elapsed=%.2fs",
+                    position, self._peak, now - self._started_at,
+                )
+            above = False
+        else:
+            self._trough = min(self._trough, position)
+            above = position - self._trough >= self._delta
         if above:
             self._release_since = now if self._release_since is None else self._release_since
             if now - self._release_since >= self._hold_s:
@@ -373,9 +392,10 @@ class GripperReleaseWatch:
             above_for = now - self._release_since if self._release_since is not None else 0.0
             logger.info(
                 "Gripper release check: elapsed=%.2fs position=%.2f delta=%+.2f "
-                "recent_min=%.2f recent_max=%.2f above_threshold=%s above_for=%.2fs max_poll_gap=%.2fs",
+                "recent_min=%.2f recent_max=%.2f above_threshold=%s above_for=%.2fs max_poll_gap=%.2fs "
+                "grasped=%s",
                 now - self._started_at, position, delta, self._recent_min, self._recent_max,
-                above, above_for, self._max_poll_gap,
+                above, above_for, self._max_poll_gap, self._trough is not None,
             )
             self._next_log = now + GRIPPER_LOG_INTERVAL_S
             self._recent_min = self._recent_max = position
@@ -388,10 +408,10 @@ class GripperReleaseWatch:
         logger.info(
             "Gripper release check summary: runtime_reason=%s elapsed=%.2fs initial=%.2f last=%.2f "
             "min=%.2f max=%.2f max_abs_delta=%.2f polls=%d max_poll_gap=%.2fs "
-            "since_last_poll=%.2fs confirmed=%s",
+            "since_last_poll=%.2fs confirmed=%s grasped=%s",
             runtime_reason, now - self._started_at, self._initial, self._last_position,
             self._min_position, self._max_position, max_delta, self._poll_count, self._max_poll_gap,
-            now - self._last_poll, self.confirmed,
+            now - self._last_poll, self.confirmed, self._trough is not None,
         )
 
 

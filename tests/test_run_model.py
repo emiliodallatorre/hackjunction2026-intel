@@ -15,54 +15,24 @@ class Verdict(enum.Enum):
 
 
 class ReleaseWatchTests(unittest.TestCase):
-    def test_confirms_only_after_gripper_movement_is_sustained(self) -> None:
+    def test_opening_to_pick_up_does_not_confirm_until_grasp_and_release(self) -> None:
         now = [0.0]
-        position = [20.0]
+        position = [25.0]
         robot = SimpleNamespace(
             joint_names=["shoulder_pan", "gripper"],
             get_observation=lambda: SimpleNamespace(joint_positions=[0.0, position[0]]),
         )
-        watch = run_model.GripperReleaseWatch(
-            robot,
-            delta=30,
-            hold_s=0.2,
-            poll_s=0.1,
-            clock=lambda: now[0],
-        )
+        watch = run_model.GripperReleaseWatch(robot, clock=lambda: now[0])
 
-        self.assertFalse(watch.is_set())
-        position[0] = 55.0
-        now[0] = 0.1
-        self.assertFalse(watch.is_set())
-        now[0] = 0.2
-        self.assertFalse(watch.is_set())
-        now[0] = 0.31
+        for timestamp, value in ((0.0, 25.0), (0.5, 60.0), (1.0, 60.0), (1.5, 60.0)):
+            now[0], position[0] = timestamp, value
+            self.assertFalse(watch.is_set())
+        for timestamp, value in ((2.0, 30.0), (2.5, 28.0), (3.0, 42.9), (3.5, 43.0), (3.75, 43.0)):
+            now[0], position[0] = timestamp, value
+            self.assertFalse(watch.is_set())
+        now[0] = 4.0
         self.assertTrue(watch.is_set())
         self.assertTrue(watch.is_set())
-
-    def test_default_threshold_requires_15_points_for_half_a_second(self) -> None:
-        for direction in (-1, 1):
-            with self.subTest(direction=direction):
-                now = [0.0]
-                position = [25.0]
-                robot = SimpleNamespace(
-                    joint_names=["shoulder_pan", "gripper"],
-                    get_observation=lambda: SimpleNamespace(joint_positions=[0.0, position[0]]),
-                )
-                watch = run_model.GripperReleaseWatch(robot, clock=lambda: now[0])
-
-                self.assertFalse(watch.is_set())
-                position[0] = 25.0 + direction * 14.9
-                now[0] = 0.125
-                self.assertFalse(watch.is_set())
-                position[0] = 25.0 + direction * 15.0
-                now[0] = 0.25
-                self.assertFalse(watch.is_set())
-                now[0] = 0.5
-                self.assertFalse(watch.is_set())
-                now[0] = 0.75
-                self.assertTrue(watch.is_set())
-                self.assertTrue(watch.is_set())
 
     def test_requires_named_gripper_and_finite_observation(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "SO-101 'gripper' joint"):
@@ -249,11 +219,11 @@ class RunStageTests(unittest.TestCase):
 
         output = "\n".join(logs.output)
         self.assertIn("initial=20.00 threshold=30.00", output)
-        self.assertIn("position=65.00 delta=+45.00", output)
-        self.assertIn("position=30.00 delta=+10.00 recent_min=30.00 recent_max=49.00", output)
+        self.assertIn("Gripper grasp detected: position=35.00 peak=65.00", output)
+        self.assertIn("position=49.00 delta=+29.00 recent_min=20.00 recent_max=65.00", output)
         self.assertIn("runtime_reason=interrupted", output)
         self.assertIn("min=20.00 max=65.00 max_abs_delta=45.00 polls=6 max_poll_gap=0.80s", output)
-        self.assertIn("since_last_poll=0.60s confirmed=False", output)
+        self.assertIn("since_last_poll=0.60s confirmed=False grasped=True", output)
         self.assertEqual(robot.get_observation.call_count, 8)
         robot.send_action.assert_called_once_with([30.0])
 
