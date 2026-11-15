@@ -9,7 +9,9 @@ configuration once, up front, and then builds a runtime per stage.
 
 import argparse
 import logging
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,17 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DURATION_S = 15.0
 
+# Reset moves the arm back to the pose it held when PolicyRunner was built, interpolating over
+# RESET_DURATION_S at RESET_FPS. These mirror physicalai's own return_to_initial_state move.
+RESET_DURATION_S = 2.5
+RESET_FPS = 30.0
+# Skip the move when every joint is already within this fraction of the pose's magnitude.
+RESET_SKIP_TOLERANCE = 0.1
+# Abort and hold if a joint lags this fraction of the largest joint travel (a likely collision).
+RESET_MAX_TRACKING_ERROR = 0.15
+# Where `reset --save-home` stores the pose, so a later process can reset to it.
+DEFAULT_HOME_FILE = Path("home_pose.json")
+
 
 class PolicyRunner:
     """Holds a validated Studio runtime configuration and runs stages against it.
@@ -43,6 +56,8 @@ class PolicyRunner:
     fresh runtime: ``run()`` closes its InferenceModel on exit, so a runtime serves one stage,
     and the task is written into the configuration before instantiation rather than passed to
     ``run()``, so changing task requires rebuilding anyway.
+
+    ``home_pose`` is read from the robot at construction and is what ``reset`` returns to.
     """
 
     def __init__(self, export_root: Path):
@@ -73,7 +88,79 @@ class PolicyRunner:
         model_args["backend"] = BACKEND
         model_args["device"] = OPENVINO_DEVICE
         model_args.pop("policy_name", None)
+        robot = self._config.init_args.get("robot")
+        if not isinstance(robot, dict):
+            raise ValueError("Runtime configuration is missing a robot")
+        self._robot_config = robot
+        self.home_pose: Any | None = None
         logger.info("Studio runtime configuration validated; %s on %s", BACKEND, OPENVINO_DEVICE)
+
+    @contextmanager
+    def _connected_robot(self) -> Iterator[Any]:
+        """Connect only the robot from the configuration, without loading the policy.
+
+        InferenceModel loads its weights in its constructor, so instantiating the whole runtime
+        to move a joint would read the model off disk for nothing. Only the robot is built here.
+        """
+        from physicalai.config import instantiate
+        from physicalai.robot import connect
+
+        robot = instantiate(self._robot_config)
+        with connect(robot) as connected:
+            yield connected
+
+    def capture_home_pose(self) -> Any:
+        """Read and remember the current pose as the one ``reset`` returns to."""
+        with self._connected_robot() as robot:
+            self.home_pose = robot.get_observation().joint_positions
+        logger.info("Home pose captured: %s", dict(zip(robot.joint_names, self.home_pose.tolist(), strict=False)))
+        return self.home_pose
+
+    def reset(self, *, pose: Any | None = None) -> None:
+        """Interpolate the arm back to ``pose`` (default: ``home_pose``) without running the policy.
+
+        Aborts holding the measured pose if a joint lags badly, which usually means a collision.
+        Raises RuntimeError if no pose has been captured yet.
+        """
+        import numpy as np
+
+        target = self.home_pose if pose is None else pose
+        if target is None:
+            raise RuntimeError("No home pose captured yet; call capture_home_pose() first")
+        target = np.asarray(target, dtype=float)
+
+        steps = max(int(RESET_DURATION_S * RESET_FPS), 1)
+        goal_time = RESET_DURATION_S / steps
+        with self._connected_robot() as robot:
+            current = robot.get_observation().joint_positions
+            if target.shape != current.shape:
+                raise ValueError(f"Pose has {target.shape} joints, robot reports {current.shape}")
+            travel = float(np.max(np.abs(target - current)))
+            relative = float(np.linalg.norm(target - current) / max(np.linalg.norm(target), 1e-8))
+            if relative <= RESET_SKIP_TOLERANCE:
+                robot.send_action(current)
+                logger.info("Already within %.0f%% of the home pose; nothing to do", relative * 100)
+                return
+            logger.info("Resetting the arm to its home pose over %.1f s", RESET_DURATION_S)
+            for step in range(1, steps + 1):
+                started = time.perf_counter()
+                fraction = step / steps
+                command = current * (1.0 - fraction) + target * fraction
+                robot.send_action(command, goal_time=goal_time)
+                measured = robot.get_observation().joint_positions
+                error = np.abs(measured - command) / max(travel, 1e-8)
+                worst = int(np.argmax(error))
+                if error[worst] > RESET_MAX_TRACKING_ERROR:
+                    robot.send_action(measured)
+                    raise RuntimeError(
+                        f"Reset aborted at step {step}/{steps}: joint "
+                        f"{robot.joint_names[worst]!r} is off by {error[worst] * 100:.0f}% of the move "
+                        "(possible collision); holding the measured pose"
+                    )
+                remaining = goal_time - (time.perf_counter() - started)
+                if remaining > 0:
+                    time.sleep(remaining)
+        logger.info("Reset complete; the arm is at its home pose")
 
     def run_stage(self, task: str, *, duration_s: float, stop_event: StopSignal | None = None) -> None:
         """Run ``task`` for ``duration_s``, or until ``stop_event`` is set, which counts as completion.
@@ -138,6 +225,47 @@ def run_task(runner: PolicyRunner, task: str, *, duration_s: float = DEFAULT_DUR
     logger.warning("Task %r ran for its configured duration; its outcome was NOT verified", task)
 
 
+def save_home_pose(runner: PolicyRunner, path: Path = DEFAULT_HOME_FILE) -> None:
+    """Read the arm's current pose and write it to ``path`` as the home pose to reset to later."""
+    import json
+
+    pose = runner.capture_home_pose()
+    path.write_text(json.dumps({"joint_positions": [float(value) for value in pose]}, indent=2))
+    logger.info("Home pose saved to %s", path)
+
+
+def load_home_pose(path: Path = DEFAULT_HOME_FILE) -> Any:
+    """Read a pose written by ``save_home_pose``."""
+    import json
+
+    import numpy as np
+
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"No home pose at {path}; teach one first with "
+            f"`run_model --export ... reset --save-home` while the arm is where you want home to be"
+        )
+    stored = json.loads(path.read_text())
+    positions = stored.get("joint_positions")
+    if not isinstance(positions, list) or not positions:
+        raise ValueError(f"{path} does not contain a joint_positions list")
+    return np.asarray(positions, dtype=float)
+
+
+def reset_robot(runner: PolicyRunner, *, home_file: Path | None = DEFAULT_HOME_FILE) -> None:
+    """Move the arm to its home pose: the runner's captured pose, or the one saved in ``home_file``.
+
+    The GUI calls this. An in-process runner that has already run a stage has a captured pose;
+    a fresh process has none, so the saved file is used.
+    """
+    if runner.home_pose is not None:
+        runner.reset()
+        return
+    if home_file is None:
+        raise RuntimeError("No home pose captured and no home file given")
+    runner.reset(pose=load_home_pose(home_file))
+
+
 def run_cycle(runner: PolicyRunner) -> bool:
     """Present a brick, inspect it, and place it in the matching dish. Returns True if defective."""
     for duration in (PRESENT_DURATION_S, GOOD_DURATION_S, BAD_DURATION_S):
@@ -194,6 +322,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Run the same task this many times (default: 1)",
     )
 
+    reset = modes.add_parser("reset", help="Move the arm to its saved home pose")
+    reset.add_argument(
+        "--save-home",
+        action="store_true",
+        help="Store the arm's current pose as home instead of moving, then exit",
+    )
+    reset.add_argument(
+        "--home",
+        type=Path,
+        default=DEFAULT_HOME_FILE,
+        help=f"File holding the home pose (default: {DEFAULT_HOME_FILE})",
+    )
+
     cycle = modes.add_parser("cycle", help="Present, inspect, and sort into the matching dish")
     cycle.add_argument(
         "--repeat",
@@ -205,6 +346,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     with open_export(args.export) as export_root:
         runner = PolicyRunner(export_root)
+        if args.mode == "reset":
+            if args.save_home:
+                save_home_pose(runner, args.home)
+            else:
+                reset_robot(runner, home_file=args.home)
+            return
         if args.mode == "task":
             run_task(runner, args.task, duration_s=args.duration, repeat=args.repeat)
         else:
