@@ -14,12 +14,12 @@ from hackjunction2026_intel.anomaly_detection.presence import (  # noqa: F401  (
 
 
 def fit_presence(empty: list[np.ndarray], bricks: list[np.ndarray],
-                 pixel_delta: int = 25) -> tuple[PresenceDetector, dict]:
+                 pixel_delta: int = 25, normalize: bool = True) -> tuple[PresenceDetector, dict]:
     """Build the reference from empty crops and put the threshold between the two classes."""
     if not empty or not bricks:
         raise ValueError("Need both empty and brick crops to calibrate presence detection")
     reference = np.median(np.stack(empty), axis=0).astype(np.uint8)
-    detector = PresenceDetector(reference, 0.0, pixel_delta)
+    detector = PresenceDetector(reference, 0.0, pixel_delta, normalize)
     empty_scores = np.array([detector.score(p) for p in empty])
     brick_scores = np.array([detector.score(p) for p in bricks])
     if brick_scores.min() > empty_scores.max():
@@ -31,6 +31,7 @@ def fit_presence(empty: list[np.ndarray], bricks: list[np.ndarray],
     stats = {
         "threshold": detector.threshold,
         "pixel_delta": pixel_delta,
+        "normalize": normalize,
         "n_empty": len(empty),
         "n_bricks": len(bricks),
         "empty_max": float(empty_scores.max()),

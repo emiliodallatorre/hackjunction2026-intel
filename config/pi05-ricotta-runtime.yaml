@@ -1,0 +1,106 @@
+# CHANGE_ME: replace machine-specific device path /dev/ttyACM1
+class_path: physicalai.runtime.RobotRuntime
+init_args:
+  robot:
+    class_path: physicalai.robot.SharedRobot
+    init_args:
+      name: 3a0e8992-934e-4b1b-9a03-1d86a92ecd9d
+      robot:
+        class_path: physicalai_so101_plugin.SO101
+        init_args:
+          port: /dev/ttyACM1
+          calibration:
+            shoulder_pan:
+              id: 1
+              drive_mode: 0
+              homing_offset: -1489
+              range_min: 718
+              range_max: 3263
+            shoulder_lift:
+              id: 2
+              drive_mode: 0
+              homing_offset: 1806
+              range_min: 823
+              range_max: 3209
+            elbow_flex:
+              id: 3
+              drive_mode: 0
+              homing_offset: -2016
+              range_min: 891
+              range_max: 3081
+            wrist_flex:
+              id: 4
+              drive_mode: 0
+              homing_offset: -1671
+              range_min: 850
+              range_max: 3179
+            wrist_roll:
+              id: 5
+              drive_mode: 0
+              homing_offset: -1890
+              range_min: 109
+              range_max: 4000
+            gripper:
+              id: 6
+              drive_mode: 0
+              homing_offset: 458
+              range_min: 2047
+              range_max: 3549
+          role: follower
+          unit: normalized
+  cameras:
+    realsense rgb:
+      class_path: physicalai.capture.SharedCamera
+      init_args:
+        camera:
+          class_path: physicalai.capture.UVCCamera
+          init_args:
+            width: 1280
+            height: 720
+            fps: 15
+            device:
+              bus: usb-0000:00:0d.0-2.3
+              index: 8
+              sensor: ''
+              serial: '318123021706'
+        color_mode: RGB
+        validate_on_connect: true
+        overwrite_settings: false
+    gripper cam:
+      class_path: physicalai.capture.SharedCamera
+      init_args:
+        camera:
+          class_path: physicalai.capture.UVCCamera
+          init_args:
+            width: 800
+            height: 600
+            fps: 30
+            device:
+              bus: usb-0000:00:14.0-3.4.1
+              index: 4
+              sensor: ''
+              serial: USB2.0_CAM1
+        color_mode: RGB
+        validate_on_connect: true
+        overwrite_settings: false
+  fps: 30.0
+  action_source:
+    class_path: physicalai.runtime.PolicySource
+    init_args:
+      model:
+        class_path: physicalai.inference.InferenceModel
+        init_args:
+          export_dir: ./exports/openvino
+          backend: openvino
+          device: CPU
+      execution:
+        class_path: physicalai.runtime.SyncExecution
+        init_args:
+          request_threshold: 0.5
+      action_queue:
+        class_path: physicalai.runtime.ChunkedActionQueue
+        init_args:
+          smoother:
+            class_path: physicalai.runtime.LerpSmoother
+            init_args: {}
+      task: Move any brick to the center

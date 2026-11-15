@@ -26,7 +26,7 @@ import os
 import signal
 import threading
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -104,8 +104,8 @@ def policy_runner(export: Path | None, reporter: Reporter) -> Iterator[Any]:
         logger.warning("Live inspection view unavailable: %s", error)
     else:
         install(reporter)
-    with run_model.open_export(export) as export_root:
-        yield run_model.PolicyRunner(export_root)
+    with run_model.open_export(export) as export_root, closing(run_model.PolicyRunner(export_root)) as runner:
+        yield runner
 
 
 def run_cycles(runner: Any, finish: threading.Event, once: bool = False) -> int:

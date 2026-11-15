@@ -38,7 +38,7 @@ class InspectionStation:
             config: Config file or loaded Config. ``None``: $BRICK_AD_CONFIG, else anomaly_detection/config.yaml.
             model_dir: Exported model folder (default: paths.model in the config).
             device: OpenVINO device (default: inference.device in the config).
-            threshold: Decision threshold (default: the trained one, 0.5).
+            threshold: Decision threshold (default: inference.threshold in the config, else the trained 0.5).
             max_looks: Views per brick before deciding even if still uncertain.
         """
         self.cfg = config if isinstance(config, Config) else load_config(config)
@@ -47,7 +47,7 @@ class InspectionStation:
         self.inspector = BrickInspector(
             model_dir or self.cfg.paths.model,
             device=device or self.cfg.inference.device,
-            threshold=threshold,
+            threshold=threshold if threshold is not None else self.cfg.inference.threshold,
             uncertain_margin=self.cfg.inference.uncertain_margin,
         )
         self.camera = Camera(self.cfg.camera)  # applies resolution, format and locked controls

@@ -74,6 +74,7 @@ class TrainConfig:
 @dataclass
 class InferenceConfig:
     device: str = "CPU"
+    threshold: float | None = None  # score >= threshold -> anomaly; None = the trained threshold (0.5)
     uncertain_margin: float = 0.1
 
 

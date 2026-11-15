@@ -53,12 +53,14 @@ def main() -> None:
         sp = sub.choices[name]
         sp.add_argument("--model", type=Path, help="model folder (default: paths.model)")
         sp.add_argument("--device", help="OpenVINO device (default: inference.device)")
-        sp.add_argument("--threshold", type=float, help="override the decision threshold (default 0.5)")
+        sp.add_argument("--threshold", type=float, help="decision threshold (default: inference.threshold in the config, else 0.5)")
 
     args = parser.parse_args()
     cfg = load_config(args.config)
     model_dir = getattr(args, "model", None) or cfg.paths.model
     device = getattr(args, "device", None) or cfg.inference.device
+    threshold = getattr(args, "threshold", None)
+    threshold = cfg.inference.threshold if threshold is None else threshold
 
     if args.command == "cameras":
         from .cameras import probe_cameras
@@ -106,7 +108,7 @@ def main() -> None:
         if not args.no_eval:
             from .evaluate import evaluate
 
-            evaluate(model_dir, cfg.paths.dataset / "test", device=device,
+            evaluate(model_dir, cfg.paths.dataset / "test", device=device, threshold=threshold,
                      uncertain_margin=cfg.inference.uncertain_margin)
             print("Note: the threshold was calibrated on this same test split; confirm on fresh captures with\n"
                   "      `brick-ad evaluate --data <folder with good/ anomaly/ empty/> --crop`.")
@@ -119,14 +121,14 @@ def main() -> None:
     elif args.command == "evaluate":
         from .evaluate import evaluate
 
-        evaluate(model_dir, args.data or cfg.paths.dataset / "test", device=device, threshold=args.threshold,
+        evaluate(model_dir, args.data or cfg.paths.dataset / "test", device=device, threshold=threshold,
                  uncertain_margin=cfg.inference.uncertain_margin, crop=args.crop, save_dir=args.save)
 
     elif args.command == "predict":
         from .imaging import expand_paths
         from hackjunction2026_intel.anomaly_detection.inspector import BrickInspector
 
-        inspector = BrickInspector(model_dir, device=device, threshold=args.threshold,
+        inspector = BrickInspector(model_dir, device=device, threshold=threshold,
                                    uncertain_margin=cfg.inference.uncertain_margin)
         for path in expand_paths(args.paths):
             pred = inspector.predict(path, crop=args.crop)

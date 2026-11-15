@@ -27,9 +27,17 @@ class PresenceDetector:
     reference: np.ndarray  # BGR uint8 crop of the empty ROI, at model resolution
     threshold: float  # presence score at or above which a brick is present
     pixel_delta: int = 25  # per-pixel change (0-255, any channel) counted as "different"
+    # Match the crop's overall colour to the reference first (per-channel gain from the medians),
+    # so a change of light (e.g. warmer lamp) is not mistaken for a brick. A brick is a local
+    # change and covers well under half the ROI, so the medians stay on the background.
+    normalize: bool = False
 
     def score(self, patch: np.ndarray) -> float:
         """Fraction of ROI pixels that differ from the empty background (0 = identical)."""
+        if self.normalize:
+            ref_median = np.median(self.reference.reshape(-1, 3), axis=0)
+            gain = ref_median / np.maximum(np.median(patch.reshape(-1, 3), axis=0), 1)
+            patch = np.clip(patch.astype(np.float32) * gain, 0, 255).astype(np.uint8)
         diff = np.abs(_blur(patch) - _blur(self.reference)).max(axis=2)
         return float((diff > self.pixel_delta).mean())
 
@@ -43,4 +51,5 @@ class PresenceDetector:
         if not (ref_file.exists() and meta_file.exists()):
             return None
         meta = json.loads(meta_file.read_text())
-        return cls(cv2.imread(str(ref_file)), meta["threshold"], meta["pixel_delta"])
+        # Models calibrated before colour matching existed have no "normalize" key.
+        return cls(cv2.imread(str(ref_file)), meta["threshold"], meta["pixel_delta"], meta.get("normalize", False))

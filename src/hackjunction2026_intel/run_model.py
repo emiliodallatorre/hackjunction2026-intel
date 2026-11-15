@@ -1,7 +1,8 @@
 """Run the exported policy: one arbitrary task, or the full inspect-and-sort cycle.
 
 Both modes go through one PolicyRunner, which validates the export and the Studio runtime
-configuration once, up front, and then builds a runtime per stage.
+configuration once, up front, then loads the policy and connects the robot and cameras once
+and reuses them for every stage until it is closed.
 
     python -m hackjunction2026_intel.run_model --export ./export task "Move any brick to the center"
     python -m hackjunction2026_intel.run_model --export ./export cycle
@@ -11,7 +12,7 @@ import argparse
 import logging
 import time
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from math import isfinite
 from pathlib import Path
 from typing import Any, Callable
@@ -44,11 +45,16 @@ RESET_FPS = 30.0
 # Skip the move when every joint is already within this fraction of the pose's magnitude.
 RESET_SKIP_TOLERANCE = 0.1
 # Abort and hold if a joint lags this fraction of the largest joint travel (a likely collision).
-RESET_MAX_TRACKING_ERROR = 0.15
+RESET_MAX_TRACKING_ERROR = 0.30
+# Hold still this long before reading the start pose, so motion left over from the policy settles.
+RESET_SETTLE_S = 0.5
+# Skip the tracking check for the first steps, while servos (e.g. gravity-loaded shoulder) start moving.
+RESET_GRACE_STEPS = 10
 # SO-101 gripper positions are normalized to [0, 100], including in degree mode.
-GRIPPER_RELEASE_DELTA = 30.0
+GRIPPER_RELEASE_DELTA = 15.0
 GRIPPER_RELEASE_HOLD_S = 0.5
 GRIPPER_POLL_S = 0.1
+GRIPPER_LOG_INTERVAL_S = 1.0
 # Where `reset --save-home` stores the pose, so a later process can reset to it.
 DEFAULT_HOME_FILE = Path("home_pose.json")
 
@@ -57,12 +63,12 @@ class PolicyRunner:
     """Holds a validated Studio runtime configuration and runs stages against it.
 
     The export and the configuration are checked once in ``__init__``, so a bad export or a
-    teleoperation configuration fails before any motion. Each ``run_stage`` call still builds a
-    fresh runtime: ``run()`` closes its InferenceModel on exit, so a runtime serves one stage,
-    and the task is written into the configuration before instantiation rather than passed to
-    ``run()``, so changing task requires rebuilding anyway.
+    teleoperation configuration fails before any motion. The first ``run_stage`` builds one
+    runtime, loading the policy and connecting the robot and cameras, and every later stage
+    reuses it, switching only the task; each ``run()`` still starts from a reset model and an
+    empty action queue. ``close()`` disconnects the runtime and frees the model.
 
-    ``home_pose`` is read from the robot at construction and is what ``reset`` returns to.
+    ``home_pose`` is what ``reset`` returns to; ``capture_home_pose`` reads it from the robot.
     """
 
     def __init__(self, export_root: Path):
@@ -70,9 +76,10 @@ class PolicyRunner:
         self.export_root = export_root
         self._load_config()
         self.home_pose: Any | None = None
+        self._runtime: Any | None = None
         logger.info("Studio runtime configuration validated; %s on %s", BACKEND, OPENVINO_DEVICE)
 
-    def _load_config(self, task: str | None = None) -> Any:
+    def _load_config(self, *, persistent_model: bool = False) -> Any:
         """Load and validate ``runtime.yaml`` afresh.
 
         Typed instantiation converts nested mappings into Namespaces in place, so a loaded
@@ -101,19 +108,61 @@ class PolicyRunner:
         model_args["backend"] = BACKEND
         model_args["device"] = OPENVINO_DEVICE
         model_args.pop("policy_name", None)
+        if persistent_model:
+            model["class_path"] = "hackjunction2026_intel.persistent_model.PersistentInferenceModel"
         if not isinstance(config.init_args.get("robot"), dict):
             raise ValueError("Runtime configuration is missing a robot")
-        if task is not None:
-            source_args["task"] = task
         return config
+
+    def _open_runtime(self) -> Any:
+        """Build and connect the shared runtime on first use; later calls return it."""
+        if self._runtime is not None:
+            return self._runtime
+        from physicalai.runtime import RobotRuntime
+
+        runtime = self._load_config(persistent_model=True).instantiate(expected_type=RobotRuntime)
+        if not isinstance(runtime, RobotRuntime):
+            raise TypeError("Runtime configuration did not instantiate a RobotRuntime")
+        try:
+            runtime.connect()
+        except BaseException:
+            self._release_model(runtime)
+            raise
+        self._runtime = runtime
+        logger.info("Policy loaded; robot and cameras connected for the session")
+        return runtime
+
+    @staticmethod
+    def _release_model(runtime: Any) -> None:
+        # PolicySource keeps no public handle on its model.
+        release = getattr(getattr(runtime.action_source, "_model", None), "release", None)
+        if release is not None:
+            release()
+
+    def close(self) -> None:
+        """Hold the arm, disconnect the shared runtime, and free the model. Safe to call twice."""
+        runtime, self._runtime = self._runtime, None
+        if runtime is None:
+            return
+        try:
+            try:
+                runtime.robot.send_action(runtime.robot.get_observation().joint_positions)
+            finally:
+                runtime.disconnect()
+        finally:
+            self._release_model(runtime)
+        logger.info("Robot and cameras disconnected; policy unloaded")
 
     @contextmanager
     def _connected_robot(self) -> Iterator[Any]:
-        """Connect only the robot from the configuration, without loading the policy.
+        """The shared runtime's robot if it is open, else only the robot from the configuration.
 
         InferenceModel loads its weights in its constructor, so instantiating the whole runtime
-        to move a joint would read the model off disk for nothing. Only the robot is built here.
+        just to move a joint would read the model off disk for nothing.
         """
+        if self._runtime is not None:
+            yield self._runtime.robot
+            return
         from physicalai.config import instantiate
         from physicalai.robot import connect
 
@@ -145,6 +194,8 @@ class PolicyRunner:
         steps = max(int(RESET_DURATION_S * RESET_FPS), 1)
         goal_time = RESET_DURATION_S / steps
         with self._connected_robot() as robot:
+            robot.send_action(robot.get_observation().joint_positions)
+            time.sleep(RESET_SETTLE_S)
             current = robot.get_observation().joint_positions
             if target.shape != current.shape:
                 raise ValueError(f"Pose has {target.shape} joints, robot reports {current.shape}")
@@ -163,7 +214,7 @@ class PolicyRunner:
                 measured = robot.get_observation().joint_positions
                 error = np.abs(measured - command) / max(travel, 1e-8)
                 worst = int(np.argmax(error))
-                if error[worst] > RESET_MAX_TRACKING_ERROR:
+                if step > RESET_GRACE_STEPS and error[worst] > RESET_MAX_TRACKING_ERROR:
                     robot.send_action(measured)
                     raise RuntimeError(
                         f"Reset aborted at step {step}/{steps}: joint "
@@ -191,11 +242,8 @@ class PolicyRunner:
         if stop_event is not None and stop_event_factory is not None:
             raise ValueError("Pass either stop_event or stop_event_factory, not both")
 
-        from physicalai.runtime import RobotRuntime
-
-        runtime = self._load_config(task).instantiate(expected_type=RobotRuntime)
-        if not isinstance(runtime, RobotRuntime):
-            raise TypeError("Runtime configuration did not instantiate a RobotRuntime")
+        runtime = self._open_runtime()
+        runtime.action_source.set_task(task)
 
         if stop_event is None and stop_event_factory is None:
             logger.warning(
@@ -205,23 +253,26 @@ class PolicyRunner:
             logger.info(
                 "Running task %r until its completion check passes (timeout %s control seconds)", task, duration_s
             )
-        with runtime:
+        try:
+            if stop_event_factory is not None:
+                stop_event = stop_event_factory(runtime.robot)
+            ticks = runtime.run(duration_s=duration_s, stop_event=stop_event, return_to_initial_state=False)
+            reason = runtime.last_run_reason
+            if reason == "interrupted":
+                raise KeyboardInterrupt("Policy stage interrupted; aborting")
+            if stop_event is None and (reason != "duration_elapsed" or ticks <= 0):
+                raise RuntimeError(f"Policy stage did not finish its duration: {reason}")
+            # Zero ticks is fine here: the completion check may already pass before the first tick.
+            if stop_event is not None and reason != "stop_requested":
+                raise RuntimeError(f"Policy stage {task!r} did not complete within {duration_s} s: {reason}")
+        finally:
+            # Cancel any remaining position target; the robot stays connected for the next stage.
             try:
-                if stop_event_factory is not None:
-                    stop_event = stop_event_factory(runtime.robot)
-                ticks = runtime.run(duration_s=duration_s, stop_event=stop_event, return_to_initial_state=False)
-                reason = runtime.last_run_reason
-                if reason == "interrupted":
-                    raise KeyboardInterrupt("Policy stage interrupted; aborting")
-                if stop_event is None and (reason != "duration_elapsed" or ticks <= 0):
-                    raise RuntimeError(f"Policy stage did not finish its duration: {reason}")
-                # Zero ticks is fine here: the completion check may already pass before the first tick.
-                if stop_event is not None and reason != "stop_requested":
-                    raise RuntimeError(f"Policy stage {task!r} did not complete within {duration_s} s: {reason}")
-            finally:
-                # Cancel any remaining position target before releasing the driver.
                 measured = runtime.robot.get_observation()
                 runtime.robot.send_action(measured.joint_positions)
+            finally:
+                if isinstance(stop_event, GripperReleaseWatch):
+                    stop_event.log_summary(runtime.last_run_reason)
 
     def present(self, station: Any) -> None:
         """Run the presentation task until inspection has not been EMPTY for PRESENT_CONFIRM_S."""
@@ -230,7 +281,7 @@ class PolicyRunner:
                 "The anomaly model has no empty-ROI reference, so it never reports EMPTY and presentation "
                 "cannot be confirmed (collect empty frames, then `brick-ad prepare` + `brick-ad fit-empty`)"
             )
-        with PresenceWatch(lambda: not station.is_empty(), PRESENT_CONFIRM_S) as watch:
+        with PresenceWatch(lambda: not station.is_empty(), PRESENT_CONFIRM_S, after_first_tick=True) as watch:
             self.run_stage(PRESENT_TASK, duration_s=PRESENT_DURATION_S, stop_event=watch)
         if watch.error is not None:
             raise RuntimeError("EMPTY check failed during presentation") from watch.error
@@ -238,7 +289,12 @@ class PolicyRunner:
 
 
 class GripperReleaseWatch:
-    """Stops a placement stage after a sustained, substantial SO-101 gripper movement."""
+    """Stops a placement stage once the SO-101 gripper grasps and then releases.
+
+    SO-101 gripper positions grow as the claw opens. A grasp is a close of at least ``delta`` below the
+    highest position seen; opening to pick up the brick therefore never counts. The release is a later
+    sustained opening of at least ``delta`` above the lowest position since the grasp.
+    """
 
     def __init__(
         self,
@@ -266,8 +322,26 @@ class GripperReleaseWatch:
         self._clock = clock
         self._initial = self._position()
         self._next_poll = clock()
+        self._started_at = self._next_poll
+        self._last_poll = self._started_at
+        self._next_log = self._started_at
+        self._last_position = self._initial
+        self._min_position = self._max_position = self._initial
+        self._recent_min = self._recent_max = self._initial
+        self._max_poll_gap = 0.0
+        self._poll_count = 0
         self._release_since: float | None = None
+        self._peak = self._initial
+        self._trough: float | None = None
         self.confirmed = False
+        logger.info(
+            "Gripper release check started: initial=%.2f threshold=%.2f hold=%.2fs min_poll_interval=%.2fs "
+            "(waiting for grasp, then release)",
+            self._initial, self._delta, self._hold_s, self._poll_s,
+        )
+        logger.warning(
+            "Release is inferred from gripper motion only; a regrasp can stop placement before the dish"
+        )
 
     def _position(self) -> float:
         positions = self._robot.get_observation().joint_positions
@@ -285,13 +359,60 @@ class GripperReleaseWatch:
         if now < self._next_poll:
             return False
         self._next_poll = now + self._poll_s
-        if abs(self._position() - self._initial) >= self._delta:
+        position = self._position()
+        self._max_poll_gap = max(self._max_poll_gap, now - self._last_poll)
+        self._last_poll = now
+        self._last_position = position
+        self._min_position = min(self._min_position, position)
+        self._max_position = max(self._max_position, position)
+        self._recent_min = min(self._recent_min, position)
+        self._recent_max = max(self._recent_max, position)
+        self._poll_count += 1
+        delta = position - self._initial
+        was_above = self._release_since is not None
+        if self._trough is None:
+            self._peak = max(self._peak, position)
+            if self._peak - position >= self._delta:
+                self._trough = position
+                logger.info(
+                    "Gripper grasp detected: position=%.2f peak=%.2f elapsed=%.2fs",
+                    position, self._peak, now - self._started_at,
+                )
+            above = False
+        else:
+            self._trough = min(self._trough, position)
+            above = position - self._trough >= self._delta
+        if above:
             self._release_since = now if self._release_since is None else self._release_since
             if now - self._release_since >= self._hold_s:
                 self.confirmed = True
         else:
             self._release_since = None
+        if now >= self._next_log or above != was_above or self.confirmed:
+            above_for = now - self._release_since if self._release_since is not None else 0.0
+            logger.info(
+                "Gripper release check: elapsed=%.2fs position=%.2f delta=%+.2f "
+                "recent_min=%.2f recent_max=%.2f above_threshold=%s above_for=%.2fs max_poll_gap=%.2fs "
+                "grasped=%s",
+                now - self._started_at, position, delta, self._recent_min, self._recent_max,
+                above, above_for, self._max_poll_gap, self._trough is not None,
+            )
+            self._next_log = now + GRIPPER_LOG_INTERVAL_S
+            self._recent_min = self._recent_max = position
         return self.confirmed
+
+    def log_summary(self, runtime_reason: str | None) -> None:
+        """Report observed gripper values without taking another robot reading."""
+        now = self._clock()
+        max_delta = max(abs(self._min_position - self._initial), abs(self._max_position - self._initial))
+        logger.info(
+            "Gripper release check summary: runtime_reason=%s elapsed=%.2fs initial=%.2f last=%.2f "
+            "min=%.2f max=%.2f max_abs_delta=%.2f polls=%d max_poll_gap=%.2fs "
+            "since_last_poll=%.2fs confirmed=%s grasped=%s",
+            runtime_reason, now - self._started_at, self._initial, self._last_position,
+            self._min_position, self._max_position, max_delta, self._poll_count, self._max_poll_gap,
+            now - self._last_poll, self.confirmed, self._trough is not None,
+        )
 
 
 def run_task(runner: PolicyRunner, task: str, *, duration_s: float = DEFAULT_DURATION_S, repeat: int = 1) -> None:
@@ -346,8 +467,8 @@ def reset_robot(runner: PolicyRunner, *, home_file: Path | None = DEFAULT_HOME_F
     runner.reset(pose=load_home_pose(home_file))
 
 
-def run_cycle(runner: PolicyRunner) -> bool:
-    """Present, inspect, place, and reset. Returns True if defective."""
+def run_cycle(runner: PolicyRunner, *, inconclusive_as_defective: bool = False) -> bool:
+    """Present, inspect, place, and reset. Returns True when routed to the defective dish."""
     for duration in (PRESENT_DURATION_S, GOOD_DURATION_S, BAD_DURATION_S):
         _validate_duration(duration)
 
@@ -365,6 +486,9 @@ def run_cycle(runner: PolicyRunner) -> bool:
             is_defective = True
         elif decision.verdict is Verdict.GOOD:
             is_defective = False
+        elif inconclusive_as_defective and decision.verdict in (Verdict.EMPTY, Verdict.ROTATE):
+            logger.warning("Inspection inconclusive; defaulting to the defective dish: %s", decision.message)
+            is_defective = True
         else:
             raise RuntimeError(f"Inspection inconclusive; not sorting the brick: {decision.message}")
 
@@ -378,8 +502,8 @@ def run_cycle(runner: PolicyRunner) -> bool:
     runner.run_stage(task, duration_s=duration_s, stop_event_factory=GripperReleaseWatch)
     runner.reset()
     logger.warning(
-        "Cycle finished; gripper release was detected and the arm returned to its captured home pose. "
-        "Dish placement itself was not visually verified"
+        "Cycle finished; gripper movement triggered the completion check and the arm returned to its "
+        "captured home pose. Release and dish placement were not verified"
     )
     return is_defective
 
@@ -431,8 +555,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     args = parser.parse_args(argv)
-    with open_export(args.export) as export_root:
-        runner = PolicyRunner(export_root)
+    with open_export(args.export) as export_root, closing(PolicyRunner(export_root)) as runner:
         if args.mode == "reset":
             if args.save_home:
                 save_home_pose(runner, args.home)
