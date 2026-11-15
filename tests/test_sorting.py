@@ -9,7 +9,7 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, Mock, call, patch
 
-from hackjunction2026_intel import sorting
+from hackjunction2026_intel import run_model, sorting
 
 
 class RunPolicyTests(unittest.TestCase):
@@ -284,71 +284,41 @@ class SortingCycleTests(unittest.TestCase):
         settings.start()
         self.addCleanup(settings.stop)
 
-    def test_each_outcome_runs_presentation_then_its_placement_on_the_same_export(self) -> None:
-        for defective, task, duration in (
-            (True, "Move the brick to the orange dish", sorting.BAD_DURATION_S),
-            (False, "Move the brick to the yellow dish", sorting.GOOD_DURATION_S),
-        ):
-            with self.subTest(defective=defective), patch.object(sorting, "run_policy") as run, \
-                    patch.object(sorting, "present_block") as present:
-                def inspect(station: object) -> bool:
-                    self.assertIs(station, self.station.__enter__.return_value)
-                    present.assert_called_once_with(self.export, station)
-                    run.assert_not_called()
-                    return defective
-
-                with patch.object(sorting, "inspect_block", side_effect=inspect):
-                    sorting.main(["--export", str(self.export)])
-                self.assertEqual(run.call_args_list, [call(self.export, task, duration_s=duration)])
-                # The inspection camera is released before placement.
-                self.station.__exit__.assert_called()
+    def test_live_sorting_uses_policy_runner_cycle(self) -> None:
+        with patch.object(run_model, "PolicyRunner") as create_runner, \
+                patch.object(run_model, "run_cycle") as run:
+            sorting.main(["--export", str(self.export)])
+        create_runner.assert_called_once_with(self.export)
+        run.assert_called_once_with(create_runner.return_value)
 
     def test_zip_export_is_extracted_including_a_wrapping_folder(self) -> None:
         archive = self.root / "export.zip"
         with zipfile.ZipFile(archive, "w") as zipped:
             zipped.writestr("my-model/runtime.yaml", "# zipped\n")
             zipped.writestr("my-model/exports/openvino/manifest.json", "{}")
-        seen: list[Path] = []
-        with patch.object(sorting, "run_policy", side_effect=lambda root, *a, **k: seen.append(root)), \
-                patch.object(sorting, "present_block", side_effect=lambda root, *a: seen.append(root)):
-            with patch.object(sorting, "inspect_block", return_value=False):
-                sorting.main(["--export", str(archive)])
-        self.assertEqual(len(seen), 2)
-        self.assertEqual(seen[0], seen[1])
-        self.assertEqual(seen[0].name, "my-model")
-        self.assertFalse(seen[0].exists(), "extracted export should be cleaned up")
+        with patch.object(run_model, "PolicyRunner") as create_runner, \
+                patch.object(run_model, "run_cycle") as run:
+            sorting.main(["--export", str(archive)])
+        create_runner.assert_called_once()
+        export_root = create_runner.call_args.args[0]
+        self.assertEqual(export_root.name, "my-model")
+        run.assert_called_once_with(create_runner.return_value)
+        self.assertFalse(export_root.exists(), "extracted export should be cleaned up")
 
     def test_missing_export_prevents_any_motion(self) -> None:
-        with patch.object(sorting, "run_policy") as run:
+        with patch.object(run_model, "PolicyRunner") as create_runner:
             with self.assertRaises(FileNotFoundError):
                 sorting.main(["--export", str(self.root / "missing.zip")])
             (self.export / "exports" / "openvino").rmdir()
             with self.assertRaises(FileNotFoundError):
                 sorting.main(["--export", str(self.export)])
-            run.assert_not_called()
+            create_runner.assert_not_called()
 
     def test_unset_placement_duration_prevents_any_motion(self) -> None:
-        with patch.object(sorting, "BAD_DURATION_S", 0), patch.object(sorting, "run_policy") as run:
+        with patch.object(sorting, "BAD_DURATION_S", 0), patch.object(run_model, "PolicyRunner") as create_runner:
             with self.assertRaises(ValueError):
                 sorting.main(["--export", str(self.export)])
-            run.assert_not_called()
-
-    def test_presentation_failure_prevents_inspection_or_placement(self) -> None:
-        with patch.object(sorting, "run_policy") as run, \
-                patch.object(sorting, "present_block", side_effect=RuntimeError("aborted")) as present:
-            with patch.object(sorting, "inspect_block") as inspect:
-                with self.assertRaisesRegex(RuntimeError, "aborted"):
-                    sorting.main(["--export", str(self.export)])
-                present.assert_called_once()
-                inspect.assert_not_called()
-                run.assert_not_called()
-
-    def test_inconclusive_inspection_prevents_placement(self) -> None:
-        with patch.object(sorting, "run_policy") as run, patch.object(sorting, "present_block"):
-            with patch.object(sorting, "inspect_block", side_effect=RuntimeError("inconclusive")):
-                with self.assertRaisesRegex(RuntimeError, "inconclusive"):
-                    sorting.main(["--export", str(self.export)])
-            run.assert_not_called()
+            create_runner.assert_not_called()
 
     def test_dry_run_without_export_routes_both_outcomes_without_loading_sdk(self) -> None:
         for defective, placement in ((True, sorting.BAD_TASK), (False, sorting.GOOD_TASK)):

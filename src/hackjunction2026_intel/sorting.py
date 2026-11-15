@@ -223,33 +223,25 @@ def run_cycle(export_root: Path | None, *, dry_run: bool = False) -> None:
     if export_root is not None:
         _validate_export(export_root)
 
-    def run_stage(task: str, duration_s: float) -> None:
-        if dry_run:
-            logger.info("DRY RUN: task %r; configured duration %s seconds; no robot commands", task, duration_s)
-        else:
-            if export_root is None:
-                raise ValueError("A Studio runtime export is required for robot execution")
-            run_policy(export_root, task, duration_s=duration_s)
+    if not dry_run:
+        from .run_model import PolicyRunner, run_cycle as run_model_cycle
 
-    if dry_run:
-        logger.warning(
-            "Dry run only: no SDK loading, hardware connections, or inference; "
-            "runtime configuration and stage durations are not validated"
-        )
-        logger.info("Moving the block to the inspection stage")
-        run_stage(PRESENT_TASK, PRESENT_DURATION_S)
-        logger.warning("Dry-run inspection uses randomness, not the anomaly model")
-        is_defective = random() < 0.5
-    else:
         if export_root is None:
             raise ValueError("A Studio runtime export is required for robot execution")
-        from .anomaly_detection import InspectionStation
+        run_model_cycle(PolicyRunner(export_root))
+        return
 
-        # Opened before any motion so a missing model or camera aborts the cycle up front.
-        with InspectionStation() as station:
-            logger.info("Moving the block to the inspection stage")
-            present_block(export_root, station)
-            is_defective = inspect_block(station)
+    def run_stage(task: str, duration_s: float) -> None:
+        logger.info("DRY RUN: task %r; configured duration %s seconds; no robot commands", task, duration_s)
+
+    logger.warning(
+        "Dry run only: no SDK loading, hardware connections, or inference; "
+        "runtime configuration and stage durations are not validated"
+    )
+    logger.info("Moving the block to the inspection stage")
+    run_stage(PRESENT_TASK, PRESENT_DURATION_S)
+    logger.warning("Dry-run inspection uses randomness, not the anomaly model")
+    is_defective = random() < 0.5
 
     if is_defective:
         logger.info("Inspection decision: defective; placing in the bad dish")
@@ -258,10 +250,7 @@ def run_cycle(export_root: Path | None, *, dry_run: bool = False) -> None:
         logger.info("Inspection decision: good; placing in the good dish")
         run_stage(GOOD_TASK, GOOD_DURATION_S)
 
-    if dry_run:
-        logger.info("Dry-run routing finished; hardware and model readiness remain unverified")
-    else:
-        logger.warning("Sorting cycle finished; the placement stage is timed and its outcome was not verified")
+    logger.info("Dry-run routing finished; hardware and model readiness remain unverified")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
