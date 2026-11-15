@@ -1,7 +1,11 @@
 """Operator dashboard for the brick sorting robot (hackjunction2026_intel.run_model).
 
-    operator-gui --export ~/Downloads/model_openvino.zip
-    operator-gui --dry-run          # no robot, camera or model: random verdicts
+    operator-gui                              # pick from the exports found in ~/Downloads
+    operator-gui --export ~/Downloads/an-export.zip   # start on this one
+    operator-gui --dry-run                    # no robot, camera or model: random verdicts
+
+Without --export the dashboard discovers every Studio OpenVINO export on this machine and starts
+on the first one; the header's picker switches between them while idle.
 """
 
 import argparse
@@ -15,8 +19,10 @@ DEFAULT_HISTORY = Path(__file__).resolve().parents[2] / "history"
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--export", type=Path, help="Studio OpenVINO runtime export: the .zip or its folder")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--export", type=Path,
+                        help="Studio OpenVINO runtime export to start on: the .zip or its folder "
+                             "(default: the first one discovered)")
     source.add_argument("--dry-run", action="store_true", help="Simulate the robot, camera and model")
     parser.add_argument("--action-duration", type=float, default=ACTION_DURATION_S,
                         help=f"Control seconds a typed action runs for (default: {ACTION_DURATION_S})")
@@ -30,7 +36,17 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.export is not None and not args.export.exists():
         parser.error(f"export not found: {args.export}")
-    source_args = ["--dry-run"] if args.dry_run else ["--export", str(args.export.resolve())]
+
+    from .models import discover
+
+    models = [] if args.dry_run else discover(args.export)
+    if not args.dry_run and not models:
+        parser.error(
+            "no Studio OpenVINO export found in ~/Downloads, your home folder or here.\n"
+            "An export is a folder (or .zip) holding runtime.yaml and exports/openvino/.\n"
+            "Pass one with --export PATH, or use --dry-run to try the dashboard without hardware."
+        )
+    source_args = ["--dry-run"] if args.dry_run else ["--export", str(models[0].path)]
 
     from nicegui import app, ui
 

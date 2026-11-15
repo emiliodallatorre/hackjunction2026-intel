@@ -108,13 +108,18 @@ def policy_runner(export: Path | None, reporter: Reporter) -> Iterator[Any]:
         yield run_model.PolicyRunner(export_root)
 
 
-def run_cycles(runner: Any, finish: threading.Event) -> int:
-    """Run sorting cycles until ``finish`` is set between two cycles; returns how many ran."""
+def run_cycles(runner: Any, finish: threading.Event, once: bool = False) -> int:
+    """Run sorting cycles until ``finish`` is set between two cycles; returns how many ran.
+
+    With ``once`` a single cycle runs and the loop ends, so one brick is sorted per press.
+    """
     count = 0
     while not finish.is_set():
         count += 1
-        logger.info("Auto cycle %s", count)
+        logger.info("Cycle %s" if once else "Auto cycle %s", count)
         run_model.run_cycle(runner)
+        if once:
+            break
     return count
 
 
@@ -125,7 +130,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     source.add_argument("--export", type=Path, help="Studio OpenVINO runtime export (.zip or folder)")
     source.add_argument("--dry-run", action="store_true", help="No robot, camera or model")
     modes = parser.add_subparsers(dest="mode", required=True)
-    modes.add_parser("cycles", help="Sort bricks until SIGUSR1")
+    cycles = modes.add_parser("cycles", help="Sort bricks until SIGUSR1")
+    cycles.add_argument("--once", action="store_true", help="Run a single cycle, then exit")
     action = modes.add_parser("action", help="Run one free-text instruction")
     action.add_argument("task")
     action.add_argument("--duration", type=float, default=run_model.DEFAULT_DURATION_S)
@@ -151,8 +157,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 run_model.reset_robot(runner, home_file=args.home)
                 message = "Arm is at its home pose"
             else:
-                count = run_cycles(runner, finish)
-                message = f"Auto cycle ended after {count} cycle{'s' if count != 1 else ''}"
+                count = run_cycles(runner, finish, once=args.once)
+                if args.once:
+                    message = "Cycle finished"
+                else:
+                    message = f"Auto cycle ended after {count} cycle{'s' if count != 1 else ''}"
     except KeyboardInterrupt:
         logger.warning("Stopped by the operator")
         reporter.send(events.RESULT, outcome=events.STOPPED, message="Stopped by the operator")

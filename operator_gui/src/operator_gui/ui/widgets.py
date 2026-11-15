@@ -1,6 +1,7 @@
 """Dashboard panels. Each builds itself in the current NiceGUI context and has ``refresh(status)``."""
 
 from collections.abc import Callable
+from typing import Any
 
 from nicegui import ui
 
@@ -59,6 +60,46 @@ class Stepper:
                 step.classes("done")
             elif i == current and status.phase is not Phase.IDLE:
                 step.classes("active")
+
+
+class ModelPicker:
+    """Chooses which Studio export the next run uses. Disabled while anything is running."""
+
+    def __init__(self, controller: CycleController, on_error: Callable[[str], None]):
+        self._controller = controller
+        self._on_error = on_error
+        self._by_label = {m.label: m for m in controller.models}
+        current = controller.model
+        with ui.row().classes("items-center gap-2 no-wrap"):
+            ui.icon("smart_toy", size="20px").classes("muted")
+            if controller.dry_run:
+                self.select = None
+                ui.label("dry run").classes("mono muted")
+            elif not self._by_label:
+                self.select = None
+                ui.label("no export found").classes("mono").style(f"color: {theme.DANGER}")
+            else:
+                self.select = ui.select(
+                    list(self._by_label), value=current.label if current else None,
+                    on_change=self._choose,
+                ).props("outlined dark dense options-dense").classes("mono min-w-[260px]") \
+                    .tooltip("Studio OpenVINO export the next run uses")
+
+    def _choose(self, event: Any) -> None:
+        model = self._by_label.get(event.value)
+        if model is None or model is self._controller.model:
+            return
+        try:
+            self._controller.select_model(model)
+        except Exception as error:
+            self._on_error(str(error))
+            current = self._controller.model
+            if self.select is not None and current is not None:
+                self.select.set_value(current.label)
+
+    def refresh(self, status: Status) -> None:
+        if self.select is not None:
+            self.select.set_enabled(status.phase is Phase.IDLE)
 
 
 class LiveView:
@@ -232,10 +273,11 @@ class LogPanel:
 
 
 class Controls:
-    """Auto cycle toggle and a free-text action prompt.
+    """Auto-cycle toggle, a one-cycle button, and a free-text action prompt.
 
-    Auto cycle toggles the loop; switching it off lets the current cycle finish ("Shutting down...").
-    The send button becomes an immediate stop while an action runs. Esc / Space stop anything at once.
+    The circular icon toggles the auto loop; switching it off lets the current cycle finish
+    ("Shutting down..."). "Run" sorts exactly one brick and stops. The send button becomes an
+    immediate stop while an action runs. Esc / Space stop anything at once.
     """
 
     PROMPT = "Run action..."
@@ -245,10 +287,15 @@ class Controls:
         self._controller = controller
         self._on_error = on_error
         with ui.row().classes("w-full items-center gap-4 no-wrap"):
-            with ui.button(on_click=self._toggle_auto).props("unelevated size=lg text-color=black") \
-                    .classes("px-6 font-bold") as self.auto:
-                self.auto_icon = ui.icon("autorenew").classes("mr-2")
-                ui.label("Auto cycle")
+            with ui.button(on_click=self._toggle_auto) \
+                    .props("round unelevated size=lg text-color=black") \
+                    .tooltip("Auto cycle: sort bricks until stopped") as self.auto:
+                self.auto_icon = ui.icon("autorenew")
+            with ui.button(on_click=self._run_once) \
+                    .props("unelevated size=lg text-color=black").classes("px-5 font-bold") as self.once:
+                ui.icon("play_arrow").classes("mr-2")
+                ui.label("Run")
+            self.once.tooltip("Sort one brick, then stop")
             with ui.row().classes("grow items-center gap-2 no-wrap"):
                 self.prompt = ui.input(placeholder=self.PROMPT).props("outlined dark dense clearable") \
                     .classes("grow mono").on("keydown.enter", self._send)
@@ -267,6 +314,17 @@ class Controls:
             return
         try:
             self._controller.start_auto()
+        except Exception as error:
+            self._on_error(f"Could not start: {error}")
+
+    def _run_once(self) -> None:
+        """Run one cycle, or stop the single cycle that is already running."""
+        status = self._controller.status
+        if status.phase is Phase.RUNNING and status.kind is Kind.ONCE:
+            self._controller.stop()
+            return
+        try:
+            self._controller.start_once()
         except Exception as error:
             self._on_error(f"Could not start: {error}")
 
@@ -294,12 +352,17 @@ class Controls:
         idle = status.phase is Phase.IDLE
         running = status.phase is Phase.RUNNING
         action = status.kind is Kind.ACTION
+        once = status.kind is Kind.ONCE
         # Auto cycle: starts when idle, asks the loop to finish while it runs; the icon spins until it ends.
         self.auto.set_enabled(idle or (status.auto and running and not status.draining))
         if status.auto:
             self.auto_icon.classes(add="animate-spin")
         else:
             self.auto_icon.classes(remove="animate-spin")
+        # Run: one cycle from idle, and an immediate stop while that cycle runs.
+        self.once.set_enabled(idle or (running and once))
+        stop_once = running and once
+        self.once.props(f"color={'negative' if stop_once else 'primary'}")
         # Prompt: free only while idle; shows "Shutting down..." until the last auto cycle ends.
         self.prompt.set_enabled(idle)
         self.reset.set_enabled(idle)

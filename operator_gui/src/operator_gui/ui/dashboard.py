@@ -6,7 +6,8 @@ from nicegui.events import KeyEventArguments
 from .. import events
 from ..controller import CycleController, Phase, Status
 from . import theme
-from .widgets import BrickTable, Controls, Kpis, LiveView, LogPanel, Stepper, StatusPill, VerdictPanel
+from .widgets import (BrickTable, Controls, Kpis, LiveView, LogPanel, ModelPicker, Stepper,
+                      StatusPill, VerdictPanel)
 
 REFRESH_S = 0.1
 THUMBNAILS_URL = "/thumbnails"
@@ -27,6 +28,7 @@ class Dashboard:
                 ui.label("operator").classes("mono muted")
             self.stepper = Stepper()
             with ui.row().classes("items-center gap-3"):
+                self.picker = ModelPicker(controller, on_error=lambda text: ui.notify(text, type="negative"))
                 mode = "DRY RUN" if controller.dry_run else "ROBOT"
                 ui.label(mode).classes("pill").style(theme.pill_style(theme.ACCENT if controller.dry_run else theme.GOOD))
                 self.pill = StatusPill()
@@ -47,7 +49,7 @@ class Dashboard:
             self.controls = Controls(controller, on_error=lambda text: ui.notify(text, type="negative"))
 
         self.panels = (self.stepper, self.pill, self.live, self.verdict, self.kpis, self.table, self.log,
-                       self.controls)
+                       self.controls, self.picker)
         ui.keyboard(on_key=self._on_key)
         ui.timer(REFRESH_S, self.refresh)
 

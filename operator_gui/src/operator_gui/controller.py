@@ -2,6 +2,8 @@
 
 * ``start_auto()`` starts ``python -m operator_gui.runner ... cycles``: one process that repeats
   ``run_model.run_cycle`` until told to finish, or until a cycle fails.
+* ``start_once()`` starts the same runner with ``--once``: exactly one cycle, then it exits. It
+  needs no finish signal, so there is no draining state.
 * ``finish_auto()`` sends SIGUSR1: the current cycle completes, then the loop ends. Until it does,
   ``Status.draining`` is True and nothing else can be started.
 * ``run_action(text)`` starts ``... action <text>``: one ``run_model.run_task``.
@@ -29,6 +31,7 @@ from enum import Enum
 
 from . import events
 from .history import DEFECTIVE, GOOD, History
+from .models import Model
 
 PREVIEW_GRACE_S = 3.0  # time for the preview to release the camera
 STOP_GRACE_S = 5.0  # time for the runtime to stop the policy, hold the arm and disconnect
@@ -55,6 +58,7 @@ class Phase(str, Enum):
 
 class Kind(str, Enum):
     AUTO = "auto"  # the auto-cycle loop
+    ONCE = "once"  # exactly one sorting cycle
     ACTION = "action"  # one free-text instruction on the policy
     RESET = "reset"  # the arm moving back to its home pose
 
@@ -93,6 +97,8 @@ class CycleController:
             home_file: Home pose file for reset (default: run_model's, relative to the working directory).
         """
         self.source_args = list(source_args)
+        self._models: list[Model] = []
+        self._model: Model | None = None
         self.history = history
         self.action_duration_s = action_duration_s
         self.home_file = home_file
@@ -110,6 +116,35 @@ class CycleController:
         return "--dry-run" in self.source_args
 
     @property
+    def models(self) -> list[Model]:
+        """Exports the picker can choose from (empty in dry run)."""
+        return list(self._models)
+
+    @property
+    def model(self) -> Model | None:
+        """The export runs use now, or None in dry run."""
+        return self._model
+
+    def set_models(self, models: Sequence[Model], selected: Model | None = None) -> None:
+        """Install the discovered exports and pick one (default: the first)."""
+        self._models = list(models)
+        if selected is None:
+            selected = self._models[0] if self._models else None
+        if selected is not None:
+            self.select_model(selected)
+
+    def select_model(self, model: Model) -> None:
+        """Run every later stage on ``model``. Refused while something is running."""
+        with self._lock:
+            if self._process is not None:
+                raise RuntimeError("Stop the current run before switching model")
+            if self.dry_run:
+                raise RuntimeError("Dry run has no model to switch")
+            self._model = model
+            self.source_args = ["--export", str(model.path)]
+            self._status.message = f"Model: {model.name}"
+
+    @property
     def status(self) -> Status:
         with self._lock:
             return replace(self._status)
@@ -121,6 +156,10 @@ class CycleController:
 
     def start_auto(self) -> None:
         self._launch(Kind.AUTO, ["cycles"], "Starting auto cycle")
+
+    def start_once(self) -> None:
+        """Sort exactly one brick, then stop."""
+        self._launch(Kind.ONCE, ["cycles", "--once"], "Running one cycle")
 
     def finish_auto(self) -> None:
         """End the auto-cycle loop once the current cycle has completed."""
@@ -298,7 +337,7 @@ class CycleController:
                 if status.phase is Phase.RUNNING:
                     text = STAGE_MESSAGES.get(status.stage, status.stage)
                     status.message = f"Shutting down after this cycle · {text}" if status.draining else text
-                if status.stage in events.PLACEMENTS and status.kind is Kind.AUTO:
+                if status.stage in events.PLACEMENTS and status.kind in (Kind.AUTO, Kind.ONCE):
                     # The station releases the camera before placement.
                     status.camera_live = False
                     placed = (DEFECTIVE if status.stage == events.PLACE_BAD else GOOD, status.decision)
