@@ -22,6 +22,12 @@ STAGE_S = 1.5  # simulated time per stage, so the dashboard has something to sho
 
 
 class DryRunner:
+    home_pose = "dry-run home"  # set, so run_model.reset_robot uses reset() rather than a home file
+
+    def reset(self, *, pose: Any | None = None) -> None:
+        logger.info("DRY RUN: resetting the arm to its home pose; no robot commands")
+        time.sleep(STAGE_S)
+
     def run_stage(self, task: str, *, duration_s: float, stop_event: Any = None) -> None:
         logger.info("DRY RUN: task %r (configured %s s); no robot commands", task, duration_s)
         time.sleep(STAGE_S)

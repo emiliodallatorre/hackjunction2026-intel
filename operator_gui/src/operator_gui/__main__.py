@@ -20,6 +20,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     source.add_argument("--dry-run", action="store_true", help="Simulate the robot, camera and model")
     parser.add_argument("--action-duration", type=float, default=ACTION_DURATION_S,
                         help=f"Control seconds a typed action runs for (default: {ACTION_DURATION_S})")
+    parser.add_argument("--home", type=Path,
+                        help="Home pose file for Reset, written by `run_model ... reset --save-home` "
+                             "(default: home_pose.json in the working directory)")
     parser.add_argument("--host", default="0.0.0.0", help="Interface to serve on (default: all)")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--history", type=Path, default=DEFAULT_HISTORY,
@@ -35,7 +38,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     from .history import History
     from .ui.dashboard import register
 
-    controller = CycleController(source_args, History(args.history), action_duration_s=args.action_duration)
+    controller = CycleController(source_args, History(args.history), action_duration_s=args.action_duration,
+                                 home_file=args.home.resolve() if args.home else None)
     register(controller)
     app.on_shutdown(controller.shutdown)
     ui.run(host=args.host, port=args.port, title="Brick Sorter", dark=True, reload=False, show=False,

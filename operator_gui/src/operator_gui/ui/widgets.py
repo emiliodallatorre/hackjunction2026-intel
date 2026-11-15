@@ -254,6 +254,8 @@ class Controls:
                     .classes("grow mono").on("keydown.enter", self._send)
                 self.send = ui.button(icon="send", on_click=self._send_or_stop) \
                     .props("round unelevated size=md text-color=black")
+                self.reset = ui.button("Reset", icon="restart_alt", on_click=self._reset, color="grey-8") \
+                    .props("unelevated").tooltip("Move the arm back to its home pose")
             self.kill = ui.button("Force kill", icon="dangerous", on_click=lambda: controller.stop(force=True),
                                   color="negative").props("unelevated")
             ui.label("Esc / Space = STOP · software stop only: keep the robot's physical E-stop in reach") \
@@ -276,6 +278,12 @@ class Controls:
         except Exception as error:
             self._on_error(str(error))
 
+    def _reset(self) -> None:
+        try:
+            self._controller.reset()
+        except Exception as error:
+            self._on_error(f"Could not reset: {error}")
+
     def _send_or_stop(self) -> None:
         if self._controller.status.phase is Phase.RUNNING:
             self._controller.stop()
@@ -294,6 +302,7 @@ class Controls:
             self.auto_icon.classes(remove="animate-spin")
         # Prompt: free only while idle; shows "Shutting down..." until the last auto cycle ends.
         self.prompt.set_enabled(idle)
+        self.reset.set_enabled(idle)
         if status.auto and status.draining:
             self.prompt.set_value("")
             self.prompt.props(f'placeholder="{self.SHUTTING_DOWN}"')
