@@ -71,8 +71,8 @@ class DeviceMeters:
     """
 
     HISTORY = 120  # samples kept per device; at SAMPLE_S this is a few seconds of detail
-    WIDTH = 96
-    HEIGHT = 14
+    WIDTH = 56
+    HEIGHT = 16
 
     def __init__(self) -> None:
         from ..telemetry import Telemetry
@@ -81,13 +81,13 @@ class DeviceMeters:
         self._telemetry.start()
         self._history: dict[str, list[float]] = {}
         self._rows: dict[str, tuple[Any, Any, Any]] = {}
-        # One narrow row per device: label, graph, then the number, so the block stays slim.
-        with ui.column().classes("gap-0"):
+        # The three devices sit side by side; within each, the label is left of its graph.
+        with ui.row().classes("items-center gap-5 no-wrap"):
             for name in ("CPU", "iGPU", "NPU"):
-                with ui.row().classes("items-center gap-2 no-wrap"):
-                    label = ui.label(name).classes("caption w-9 text-right")
+                with ui.row().classes("items-center gap-1.5 no-wrap"):
+                    label = ui.label(name).classes("caption")
                     graph = ui.html("").classes("leading-none")
-                    value = ui.label("--").classes("mono text-xs w-24")
+                    value = ui.label("--").classes("mono text-xs whitespace-nowrap")
                     self._rows[name] = (graph, value, label)
 
     IDLE_PERCENT = 1.0  # at or below this a device counts as unused and is drawn grey
