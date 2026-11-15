@@ -17,8 +17,10 @@ logger = logging.getLogger(__name__)
 
 # The single multi-task π0.5 model always runs on OpenVINO, ignoring the export's device.
 BACKEND = "openvino"
-# AUTO lets OpenVINO pick the best local accelerator; pin "CPU", "GPU" or "NPU" if needed.
-OPENVINO_DEVICE = "AUTO"
+# Pinned to the iGPU: it is the fastest local device for a ~3B VLA, and it keeps the policy off
+# the NPU, where the anomaly model runs, and off the CPU, which drives the control loop and the
+# camera decode. Use "AUTO" to let OpenVINO choose, or "CPU"/"NPU" to pin another device.
+OPENVINO_DEVICE = "GPU"
 OPENVINO_DEVICES = frozenset({"AUTO", "CPU", "GPU", "NPU"})
 
 # Task instructions match the relabelled demonstration dataset.

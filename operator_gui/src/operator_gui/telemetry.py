@@ -17,11 +17,18 @@ Sources, in the order they are tried:
 
 Temperatures come from hwmon, which on many laptops only publishes the CPU package: the iGPU and
 NPU then show usage without a temperature rather than a made-up one.
+
+Sampling runs in a background thread at SAMPLE_S and ``read()`` returns the *peak* of each device
+since the previous call, not the average. A single NPU inference can be shorter than the
+dashboard's refresh interval, and averaging a busy-time counter over a whole second turns a 50 ms
+burst into an unreadable 5%; the peak of short samples keeps the spike visible. ``active`` also
+reports the driver's own runtime power state, which flips for any work at all, however brief.
 """
 
 import logging
+import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -30,6 +37,7 @@ logger = logging.getLogger(__name__)
 CPU_TEMP_NAMES = ("coretemp", "k10temp", "zenpower", "acpitz", "acpitz_0")
 GPU_HWMON_NAMES = ("i915", "xe", "amdgpu")
 NPU_HWMON_NAMES = ("intel_vpu", "ivpu")
+SAMPLE_S = 0.05  # background sampling period: short enough to catch a single NPU inference
 
 
 @dataclass
@@ -44,6 +52,8 @@ class Reading:
     percent: float | None = None
     celsius: float | None = None
     approximate: bool = False
+    active: bool | None = None  # driver runtime power state, when it exposes one
+    trace: list[float] = field(default_factory=list)  # samples since the previous read()
 
 
 def _read_int(path: Path) -> int | None:
@@ -100,6 +110,12 @@ class Telemetry:
         self._npu_rate = _Rate(1_000_000.0)  # npu_busy_time_us is microseconds
         self._gpu_card = self._find_card()
         self._npu_dir = self._find_npu()
+        self._lock = threading.Lock()
+        self._halt = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._pending: dict[str, list[float]] = {}
+        self._latest: dict[str, Reading] = {}
+        self._seen_active: set[str] = set()
         logger.info("Telemetry: gpu=%s npu=%s", self._gpu_card or "none", self._npu_dir or "none")
 
     @staticmethod
@@ -176,7 +192,70 @@ class Telemetry:
                 counter = _read_int(self._npu_dir / name)
                 if counter is not None:
                     break
-        return Reading("NPU", self._npu_rate.update(counter), _hwmon_temp(NPU_HWMON_NAMES))
+        return Reading("NPU", self._npu_rate.update(counter), _hwmon_temp(NPU_HWMON_NAMES),
+                       active=self._npu_active())
+
+    def _npu_active(self) -> bool | None:
+        """True while the driver keeps the NPU powered: it suspends within moments of going idle."""
+        if self._npu_dir is None:
+            return None
+        try:
+            return (self._npu_dir / "power" / "runtime_status").read_text().strip() == "active"
+        except OSError:
+            return None
+
+    # -- background sampling -------------------------------------------------
+
+    def start(self) -> None:
+        """Sample in the background so short bursts are not averaged away."""
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._sample_loop, name="telemetry", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._halt.set()
+        thread, self._thread = self._thread, None
+        if thread is not None:
+            thread.join(timeout=1.0)
+
+    def _sample_loop(self) -> None:
+        while not self._halt.is_set():
+            try:
+                sample = self._sample()
+            except Exception:  # noqa: BLE001 - telemetry must never take the dashboard down
+                logger.debug("Telemetry sample failed", exc_info=True)
+            else:
+                with self._lock:
+                    for reading in sample:
+                        bucket = self._pending.setdefault(reading.name, [])
+                        if reading.percent is not None:
+                            bucket.append(reading.percent)
+                        if reading.active:
+                            self._seen_active.add(reading.name)
+                        self._latest[reading.name] = reading
+            self._halt.wait(SAMPLE_S)
+
+    def _sample(self) -> list[Reading]:
+        return [self._cpu(), self._gpu(), self._npu()]
 
     def read(self) -> list[Reading]:
-        return [self._cpu(), self._gpu(), self._npu()]
+        """Each device's peak since the previous call, with the samples that produced it.
+
+        Without a running sampler this falls back to one direct reading.
+        """
+        if self._thread is None:
+            return self._sample()
+        with self._lock:
+            pending, self._pending = self._pending, {}
+            seen_active, self._seen_active = self._seen_active, set()
+            latest = dict(self._latest)
+        out = []
+        for name in ("CPU", "iGPU", "NPU"):
+            reading = latest.get(name) or Reading(name)
+            samples = pending.get(name, [])
+            peak = max(samples) if samples else reading.percent
+            out.append(Reading(name, peak, reading.celsius, reading.approximate,
+                               active=reading.active or (name in seen_active) or None,
+                               trace=samples))
+        return out

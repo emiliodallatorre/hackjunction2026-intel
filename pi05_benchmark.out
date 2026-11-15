@@ -1,0 +1,366 @@
+=== VLA policy benchmark ===
+  mode      ssh intel@roberta
+  export    /home/intel/Downloads/pi05-ricotta-runtime
+  devices   GPU,CPU,NPU
+  control   30 Hz (used for the action-chunk headroom maths)
+  iters     60 (warmup 10)   sustain 300s   idle 30s
+  end2end   yes (needs physicalai importable)
+  estimate  ~23 min (longer for pi0.5: a cold iGPU compile can take minutes)
+
+>>> connecting to intel@roberta (password asked once)
+>>> copying bench_vla.py
+>>> resolving export on the host: /home/intel/Downloads/pi05-ricotta-runtime
+    /home/intel/Downloads/pi05-ricotta-runtime
+>>> checking venv: /home/intel/Desktop/hackjunction/hackjunction2026-intel/.venv/bin/activate
+    OK 2026.4.1-22982-e213a147257-releases/2026/4
+>>> remote sudo requested (for RAPL package energy) - it may prompt
+>>> running
+
+    python: /home/intel/Desktop/hackjunction/hackjunction2026-intel/.venv/bin/python3
+    export: /home/intel/Downloads/pi05-ricotta-runtime
+[sudo: authenticate] Password: ********        ********        
+
+==========================================================================
+0. ENVIRONMENT
+==========================================================================
+  timestamp                  2026-11-14T20:50:55-0800
+  hostname                   intel-HP-OmniBook-Ultra-Laptop-14t-kd000
+  kernel                     7.0.0-38-generic
+  cpu_model                  Intel(R) Core(TM) Ultra X9 388H
+  cpu_count                  16
+  openvino_version           2026.4.1-22982-e213a147257-releases/2026/4
+  numpy_version              2.4.6
+  python                     3.13.18
+  ov_available_devices       ['CPU', 'GPU', 'NPU']
+  requested_devices          ['GPU', 'CPU', 'NPU']
+  cpu_governor               powersave
+  energy_perf_pref           performance
+  ac_online                  True
+  battery_status             Full
+  running_as_root            True
+  export_dir                 /home/intel/Downloads/pi05-ricotta-runtime
+  control_fps                30.0
+  iters                      60
+  warmup                     10
+  sustain_s                  300
+
+  Device details:
+    CPU    Intel(R) Core(TM) Ultra X9 388H
+    GPU    Intel(R) Graphics [0xb080] (iGPU)
+           GPU_DEVICE_TOTAL_MEM_SIZE      61.42 GB
+           GPU_EXECUTION_UNITS_COUNT      96
+           DEVICE_ARCHITECTURE            GPU: vendor=0x8086 arch=v30.0.4
+    NPU    Intel(R) AI Boost
+
+  Sensors:
+    energy source            rapl (usable)
+    RAPL readable            ['package-0@intel-rapl:0', 'core@intel-rapl:0:0', 'uncore@intel-rapl:0:1', 'dram@intel-rapl:0:2', 'psys@intel-rapl:1']
+    temp sensors             21 found, primary = coretemp/Package id 0, gpu = acpitz_0/temp1_input
+
+==========================================================================
+MODEL
+==========================================================================
+  policy           pi05
+  export           /home/intel/Downloads/pi05-ricotta-runtime
+  openvino dir     /home/intel/Downloads/pi05-ricotta-runtime/exports/openvino
+  runner           physicalai.inference.runners.single_pass.SinglePass
+  IR files         1
+    pi05.xml                     weights    6252.3 MB  
+  total weights    6252.3 MB on disk
+  action chunk     50 actions per inference -> one inference covers 1.67 s at 30 Hz control
+  preprocessors    normalize, pi05, noise, ov_tokenizer
+  ov cache dir     /tmp/vla_bench_ovcache_0
+
+  Declared input features (pre-preprocessing shapes):
+    state                      STATE    shape=[6] dtype=float32
+    images.realsense rgb       VISUAL   shape=[3, 720, 1280] dtype=float32
+    images.gripper cam         VISUAL   shape=[3, 600, 800] dtype=float32
+    task                       LANGUAGE shape=[] dtype=string
+    noise                      COMMON   shape=[50, 32] dtype=float32
+
+==========================================================================
+1. IDLE BASELINE (30 s, before any load)
+==========================================================================
+  idling so load numbers can be reported as a delta ...
+  idle power     0.93 W  [rapl-package]
+  idle temp      mean=44.1C max=57.0C start=57.0C  [coretemp/Package id 0]
+  idle gpu temp  mean=26.8C  [acpitz_0/temp1_input]
+
+==========================================================================
+DEVICE: GPU   policy: pi05
+==========================================================================
+
+  2. COLD START [pi05]
+     cold cache (first ever)    read=    38.1  compile=  12481.8  first_infer=   129.1  total=  12649.0  (ms)
+     warm cache (cached blob)   read=    52.5  compile=   1398.1  first_infer=   113.1  total=   1563.8  (ms)
+     no cache                   read=    40.0  compile=   9916.1  first_infer=   108.8  total=  10064.8  (ms)
+     -> blob cache saves 11084 ms of compile time on GPU
+     (a cold compile is paid once per process start, so it sets how long
+      the robot waits before its first action, not the control rate)
+
+  3. STEADY-STATE LATENCY [pi05] (batch 1, LATENCY hint)
+     EXECUTION_DEVICES                  ['GPU.0']
+     NUM_STREAMS                        1
+     OPTIMAL_NUMBER_OF_INFER_REQUESTS   1
+     INFERENCE_PRECISION_HINT           <Type: 'float16'>
+     GPU_HOST_TASK_PRIORITY             Priority.MEDIUM
+     GPU_QUEUE_THROTTLE                 Priority.MEDIUM
+     synthetic input ports:
+       state                        (1, 6) float32
+       noise                        (1, 50, 32) float32
+       tokenized_prompt             (1, 200) int64
+       tokenized_prompt_mask        (1, 200) bool
+       images                       (2, 1, 3, 224, 224) float32
+       image_masks                  (2, 1) bool
+  latency (ms)   min=  104.14  p50=  104.95  p90=  106.20
+                 p95=  106.47  p99=  106.76  max=  106.79
+                 mean= 105.18  stdev=   0.66
+  throughput     9.51 inferences/s (sequential, batch 1)
+  jitter         p99/p50 = 1.02x (tight)
+  action chunk   50 actions/inference -> 476.4 actions/s at p50
+  control budget 1667 ms per chunk at 30 Hz; p50 uses 6.3%, p99 uses 6.4%
+  -> REAL-TIME: p99 fits the budget  (ceiling 468.3 Hz at p99)
+  energy         39.80 W avg, 4185.7 mJ/inference  [rapl-package]
+                 83.71 mJ per action (50 actions per inference)
+  marginal       +38.87 W over idle -> 4088.5 mJ/inference attributable to inference
+  temperature    start=65.0C mean=67.8C max=70.0C
+  gpu temp       mean=26.8C max=26.8C
+
+  4. PEAK THROUGHPUT [pi05] (async queue, THROUGHPUT hint)
+     parallel requests 4, streams 2
+  throughput     9.16 inferences/s (0.96x the batch-1 rate)
+     -> no headroom from concurrency: the device is already saturated
+        by one request, which is typical for a large transformer.
+  energy         39.55 W avg, 4316.0 mJ/inference  [rapl-package]
+  temperature    max=72.0C
+
+  6. SUSTAINED LOAD [pi05] (300 s) - thermal throttling
+     running 300 s of continuous batch-1 inference, 10 s buckets ...
+2026-11-14 20:57:22.993 -08:00 | INFO     | physicalai.inference.model:__init__:136 - Loading policy from /home/intel/Downloads/pi05-ricotta-runtime/exports/openvino
+2026-11-14 20:57:22.994 -08:00 | INFO     | physicalai.inference.model:__init__:163 - Loaded manifest: policy=pi05, backend=openvino, device=GPU
+2026-11-14 20:57:22.994 -08:00 | INFO     | physicalai.inference.model:__init__:173 - Compiling openvino model on GPU...
+2026-11-14 20:57:33.844 -08:00 | INFO     | physicalai.inference.model:__init__:175 - Model compiled in 10.8s
+2026-11-14 20:57:33.918 -08:00 | INFO     | physicalai.inference.model:__init__:198 - Loaded 4 preprocessors, 1 postprocessors, 0 callbacks
+2026-11-14 20:57:33.919 -08:00 | INFO     | physicalai.inference.model:__init__:211 - InferenceModel ready (chunk_size=1, total 10.9s)
+
+       t(s)    inf/s    p50(ms)    p99(ms)  temp(C)  gpu(C)
+         10     9.51     104.89     108.10     77.0    26.8
+         20     9.32     106.43     120.36     75.0    26.8
+         30     8.39     119.14     122.43     74.0    26.8
+         40     8.34     118.59     134.25     75.0    26.8
+         50     8.46     118.09     119.77     74.0    26.8
+         60     8.45     118.25     119.83     74.0    26.8
+         70     7.90     126.43     151.74     73.0    26.8
+         81     7.33     129.68     165.88     74.0    26.8
+         91     7.05     142.61     162.29     70.0    26.8
+        101     6.60     138.34     390.11     71.0    26.8
+        111     6.96     130.04     255.28     75.0    26.8
+        121     7.19     121.59     287.58     76.0    26.8
+        131     6.98     121.33     293.89     74.0    26.8
+        141     8.03     122.27     287.82     76.0    26.8
+        151     8.42     118.71     120.16     77.0    26.8
+        161     8.43     118.55     120.46     77.0    26.8
+        171     8.41     118.84     120.52     76.0    26.8
+        181     8.40     119.04     120.87     77.0    26.8
+        192     8.41     118.80     121.56     77.0    26.8
+        202     8.42     118.61     120.59     77.0    26.8
+        212     8.42     118.63     120.48     77.0    26.8
+        222     8.44     118.43     121.43     77.0    26.8
+        232     8.42     118.62     120.17     77.0    26.8
+        242     8.42     118.64     120.31     77.0    26.8
+        252     8.41     118.81     120.81     78.0    26.8
+        262     8.39     119.17     120.69     78.0    26.8
+        272     8.39     119.06     120.76     78.0    26.8
+        282     7.61     132.09     146.40     72.0    26.8
+        292     6.90     144.78     149.23     72.0    26.8
+
+     burst    (0-10s)  9.51 inf/s @ 77.0C
+     sustained (last)  6.90 inf/s @ 72.0C
+     -> drop 27.5%  THROTTLING
+     -> sustained ceiling 335.0 Hz control (budget 8.9% used at p99)
+     energy   30.10 W avg, 3722.3 mJ/inference  [rapl-package]
+     temps    start=72.0C max=81.0C end=76.0C
+     gpu      max=26.8C
+
+  5. END-TO-END InferenceModel.infer() on GPU
+     SKIPPED: TypeError: data type 'string' not understood
+
+==========================================================================
+DEVICE: CPU   policy: pi05
+==========================================================================
+^[[B    
+
+  2. COLD START [pi05]
+     cold cache (first ever)    read=    45.6  compile=   6083.1  first_infer=  8041.6  total=  14170.3  (ms)
+     warm cache (cached blob)   read=    47.0  compile=   1379.8  first_infer=  8153.4  total=   9580.2  (ms)
+     no cache                   read=    47.3  compile=   4247.6  first_infer=  8173.9  total=  12468.9  (ms)
+     -> blob cache saves 4703 ms of compile time on CPU
+     (a cold compile is paid once per process start, so it sets how long
+      the robot waits before its first action, not the control rate)
+
+  3. STEADY-STATE LATENCY [pi05] (batch 1, LATENCY hint)
+     EXECUTION_DEVICES                  ['CPU']
+     NUM_STREAMS                        1
+     OPTIMAL_NUMBER_OF_INFER_REQUESTS   1
+     INFERENCE_NUM_THREADS              4
+     INFERENCE_PRECISION_HINT           <Type: 'float32'>
+     synthetic input ports:
+       state                        (1, 6) float32
+       noise                        (1, 50, 32) float32
+       tokenized_prompt             (1, 200) int64
+       tokenized_prompt_mask        (1, 200) bool
+       images                       (2, 1, 3, 224, 224) float32
+       image_masks                  (2, 1) bool
+  latency (ms)   min= 8079.78  p50= 8103.69  p90= 8115.89
+                 p95= 8118.84  p99= 8126.21  max= 8128.96
+                 mean=8103.03  stdev=  10.66
+  throughput     0.12 inferences/s (sequential, batch 1)
+  jitter         p99/p50 = 1.00x (tight)
+  action chunk   50 actions/inference -> 6.2 actions/s at p50
+  control budget 1667 ms per chunk at 30 Hz; p50 uses 486.2%, p99 uses 487.6%
+  -> TOO SLOW: p99 exceeds the budget, the queue will starve  (ceiling 6.2 Hz at p99)
+  energy         29.35 W avg, 237786.3 mJ/inference  [rapl-package]
+                 4755.73 mJ per action (50 actions per inference)
+  marginal       +28.42 W over idle -> 230310.1 mJ/inference attributable to inference
+  temperature    start=97.0C mean=97.5C max=98.0C
+  gpu temp       mean=26.8C max=26.8C
+
+  4. PEAK THROUGHPUT [pi05] (async queue, THROUGHPUT hint)
+     parallel requests 4, streams 4
+  throughput     0.25 inferences/s (2.00x the batch-1 rate)
+  energy         29.74 W avg, 120672.3 mJ/inference  [rapl-package]
+  temperature    max=99.0C
+
+  6. SUSTAINED LOAD [pi05] (300 s) - thermal throttling
+     running 300 s of continuous batch-1 inference, 10 s buckets ...
+^[[B2026-11-14 21:17:25.564 -08:00 | INFO     | physicalai.inference.model:__init__:136 - Loading policy from /home/intel/Downloads/pi05-ricotta-runtime/exports/openvino
+2026-11-14 21:17:25.564 -08:00 | INFO     | physicalai.inference.model:__init__:163 - Loaded manifest: policy=pi05, backend=openvino, device=CPU
+2026-11-14 21:17:25.564 -08:00 | INFO     | physicalai.inference.model:__init__:173 - Compiling openvino model on CPU...
+2026-11-14 21:17:30.096 -08:00 | INFO     | physicalai.inference.model:__init__:175 - Model compiled in 4.5s
+2026-11-14 21:17:30.135 -08:00 | INFO     | physicalai.inference.model:__init__:198 - Loaded 4 preprocessors, 1 postprocessors, 0 callbacks
+2026-11-14 21:17:30.135 -08:00 | INFO     | physicalai.inference.model:__init__:211 - InferenceModel ready (chunk_size=1, total 4.6s)
+
+       t(s)    inf/s    p50(ms)    p99(ms)  temp(C)  gpu(C)
+         16     0.12    8115.21    8125.21     98.0    26.8
+         32     0.12    8124.58    8125.86     98.0    26.8
+         49     0.12    8126.17    8127.06     98.0    26.8
+         65     0.12    8125.30    8126.51     97.0    26.8
+         81     0.12    8130.84    8131.78     97.0    26.8
+         98     0.12    8112.78    8122.80     97.0    26.8
+        114     0.12    8115.27    8116.03     97.0    26.8
+        130     0.12    8152.18    8179.97     98.0    26.8
+        146     0.12    8105.96    8116.02     98.0    26.8
+        162     0.12    8137.69    8152.87     97.0    26.8
+        180     0.12    8537.88    8959.75     97.0    26.8
+        195     0.07   15304.99   15304.99     97.0    26.8
+        207     0.08   12351.29   12351.29     97.0    26.8
+        224     0.12    8508.44    8660.15     97.0    26.8
+        241     0.12    8165.24    8171.98     98.0    26.8
+        257     0.12    8143.10    8149.45     97.0    26.8
+        273     0.12    8134.03    8136.52     97.0    26.8
+        289     0.12    8133.69    8138.38     98.0    26.8
+        306     0.12    8138.81    8139.26     98.0    26.8
+
+     burst    (0-10s)  0.12 inf/s @ 98.0C
+     sustained (last)  0.12 inf/s @ 98.0C
+     -> drop 0.3%  stable
+     -> sustained ceiling 6.1 Hz control (budget 488.4% used at p99)
+     energy   29.49 W avg, 250429.2 mJ/inference  [rapl-package]
+     temps    start=99.0C max=99.0C end=98.0C
+     gpu      max=26.8C
+
+  5. END-TO-END InferenceModel.infer() on CPU
+     SKIPPED: TypeError: data type 'string' not understood
+
+==========================================================================
+DEVICE: NPU   policy: pi05
+==========================================================================
+[ERROR] 21:17:32.053 [vpux-compiler] 'IE.MatMul' op operand #0 must be ranked tensor of 16-bit float or 32-bit float or 64-bit float or 32-bit signed integer or quantized type values, but got 'tensor<1x50x1024xbf16>'
+
+  2. COLD START [pi05]
+
+==========================================================================
+DEVICE: NPU - FAILED
+==========================================================================
+  RuntimeError: Exception from src/inference/src/cpp/core.cpp:117:
+Exception from src/inference/src/dev/plugin.cpp:54:
+Exception from src/plugins/intel_npu/src/plugin/src/plugin.cpp:560:
+Exception from src/plugins/intel_npu/src/compiler_adapter/src/ze_graph_ext_wrappers.cpp:425:
+Compilation failed. Level0 pfnCreate2 result: ZE_RESULT_ERROR_INVALID_ARGUMENT, code 0x78000004 - generic error code for invalid arguments . [NPU_DRV] Driver reports a failure from vclAllocatedExecutableCreate4, return code: 2013265924
+[NPU_VCL] Compiler returned msg:
+Failed to create a valid MLIR module for the IR model
+
+
+
+
+
+
+  FIX: the iGPU ran out of memory compiling this model. The iGPU shares
+       system DRAM, and one buffer cannot exceed MAX_MEM_ALLOC_SIZE
+       printed above. Options: raise the GPU aperture in BIOS, close
+       other GPU users, or benchmark this model on CPU instead.
+
+  OpenVINO available_devices = ['CPU', 'GPU', 'NPU']
+  Continuing with the remaining devices.
+
+==========================================================================
+7. MEMORY
+==========================================================================
+  peak RSS (VmHWM)  28689.8 MB
+  current RSS       810.8 MB
+  weights on disk   6252.3 MB
+  NOTE: peak covers the whole process incl. every device and IR compiled
+        above, so it is an upper bound, not per-device cost. On GPU the
+        weights also occupy shared system DRAM through the driver, which
+        this counter does not separate out.
+
+==========================================================================
+SUMMARY (one row per device x IR)
+==========================================================================
+  device  ir                  p50      p95      p99   inf/s    act/s   duty%      cold      warm    mJ/inf  drop%  maxC
+                               ms       ms       ms                    @30Hz        ms        ms                       
+  ---------------------------------------------------------------------------------------------------------------------
+  GPU     pi05.xml         104.95   106.47   106.76    9.51    476.4     6.4   12481.8    1398.1    4185.7   27.5  70.0
+  CPU     pi05.xml        8103.69  8118.84  8126.21    0.12      6.2   487.6    6083.1    1379.8  237786.3    0.3  98.0
+  NPU     unavailable: RuntimeError: Exception from src/inference/src/cpp/core.cpp:
+
+  GPU: REAL-TIME. One chunk every 1.67 s is needed; p99 is 0.11 s (6.4% of the budget). Control ceiling 468 Hz.
+  CPU: TOO SLOW at 30 Hz. p99 is 8.13 s but the budget is 1.67 s; the action queue starves. Highest sustainable control rate is 6.2 Hz.
+  end-to-end InferenceModel numbers unavailable (see section 5); the
+  per-IR numbers exclude the CPU-side resize and normalisation.
+
+==========================================================================
+OUTPUT FILES
+==========================================================================
+  /tmp/vla_bench/vla_20261115_055046.json  (69.7 KB)
+  /tmp/vla_bench/vla_20261115_055046_traces.csv  (948.8 KB)
+  /tmp/vla_bench/vla_20261115_055046_latencies.csv  (4.1 KB)
+  /tmp/vla_bench/vla_20261115_055046_sustained.csv  (3.8 KB)
+  /tmp/vla_bench/vla_20261115_055046_summary.csv  (0.6 KB)
+
+  Plot them with:
+    python3 benchmark/plot_benchmark.py /tmp/vla_bench/vla_20261115_055046.json
+
+>>> fetching results into benchmark/results/
+    /sources/hackjunction2026-intel/benchmark/results/vla_20261115_055046.json
+    /sources/hackjunction2026-intel/benchmark/results/vla_20261115_055046_latencies.csv
+    /sources/hackjunction2026-intel/benchmark/results/vla_20261115_055046_summary.csv
+    /sources/hackjunction2026-intel/benchmark/results/vla_20261115_055046_sustained.csv
+    /sources/hackjunction2026-intel/benchmark/results/vla_20261115_055046_traces.csv
+=== log: intel@roberta:/tmp/vla_bench/last_run.log
+
+>>> generating graphs
+
+vla_20261115_055046.json
+  host intel-HP-OmniBook-Ultra-Laptop-14t-kd000  cpu Intel(R) Core(TM) Ultra X9 388H
+  devices benchmarked: ['GPU', 'CPU', 'NPU']
+  trace samples 13667, latency samples 120, sustained buckets 48
+  writing:
+  /sources/hackjunction2026-intel/benchmark/results/plots_vla_20261115_055046/latency_distribution.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_vla_20261115_055046/latency_over_time.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_vla_20261115_055046/power_temperature.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_vla_20261115_055046/sustained_throughput.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_vla_20261115_055046/cold_start.png
+  /sources/hackjunction2026-intel/benchmark/results/plots_vla_20261115_055046/device_comparison.png
+
+6 figure(s) written.

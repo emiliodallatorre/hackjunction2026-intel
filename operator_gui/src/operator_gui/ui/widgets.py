@@ -70,31 +70,34 @@ class DeviceMeters:
     A device whose counters the kernel does not expose shows "n/a" instead of a misleading 0%.
     """
 
-    HISTORY = 40
-    WIDTH = 68
-    HEIGHT = 22
+    HISTORY = 120  # samples kept per device; at SAMPLE_S this is a few seconds of detail
+    WIDTH = 96
+    HEIGHT = 14
 
     def __init__(self) -> None:
         from ..telemetry import Telemetry
 
         self._telemetry = Telemetry()
+        self._telemetry.start()
         self._history: dict[str, list[float]] = {}
-        self._rows: dict[str, tuple[Any, Any]] = {}
-        with ui.row().classes("items-center gap-4 no-wrap"):
+        self._rows: dict[str, tuple[Any, Any, Any]] = {}
+        # One narrow row per device: label, graph, then the number, so the block stays slim.
+        with ui.column().classes("gap-0"):
             for name in ("CPU", "iGPU", "NPU"):
-                with ui.column().classes("items-start gap-0"):
-                    with ui.row().classes("items-center gap-1 no-wrap"):
-                        ui.label(name).classes("caption").style(f"color: {theme.TELEMETRY}")
-                        value = ui.label("--").classes("mono text-xs")
+                with ui.row().classes("items-center gap-2 no-wrap"):
+                    label = ui.label(name).classes("caption w-9 text-right")
                     graph = ui.html("").classes("leading-none")
-                    self._rows[name] = (graph, value)
+                    value = ui.label("--").classes("mono text-xs w-24")
+                    self._rows[name] = (graph, value, label)
 
-    def _spark(self, samples: list[float]) -> str:
-        """The samples as an SVG polyline, newest on the right."""
+    IDLE_PERCENT = 1.0  # at or below this a device counts as unused and is drawn grey
+
+    def _spark(self, samples: list[float], colour: str) -> str:
+        """The samples as an SVG polyline in ``colour``, newest on the right."""
         w, h = self.WIDTH, self.HEIGHT
         if not samples:
             return (f'<svg width="{w}" height="{h}"><rect width="{w}" height="{h}" rx="3" '
-                    f'fill="{theme.TELEMETRY}14"/></svg>')
+                    f'fill="{colour}14"/></svg>')
         step = w / max(len(samples) - 1, 1)
         points = " ".join(
             f"{i * step:.1f},{h - 1 - (min(max(v, 0.0), 100.0) / 100.0) * (h - 2):.1f}"
@@ -104,28 +107,40 @@ class DeviceMeters:
         area = f"0,{h} {points} {(len(samples) - 1) * step:.1f},{h}"
         return (
             f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
-            f'<rect width="{w}" height="{h}" rx="3" fill="{theme.TELEMETRY}14"/>'
-            f'<polygon points="{area}" fill="{theme.TELEMETRY}33"/>'
-            f'<polyline points="{points}" fill="none" stroke="{theme.TELEMETRY}" '
+            f'<rect width="{w}" height="{h}" rx="3" fill="{colour}14"/>'
+            f'<polygon points="{area}" fill="{colour}33"/>'
+            f'<polyline points="{points}" fill="none" stroke="{colour}" '
             f'stroke-width="1.5" stroke-linejoin="round"/>'
             f"</svg>"
         )
 
     def refresh(self, status: Status) -> None:
         for reading in self._telemetry.read():
-            graph, value = self._rows[reading.name]
+            graph, value, label = self._rows[reading.name]
             samples = self._history.setdefault(reading.name, [])
-            if reading.percent is not None:
+            # Append every background sample, so a burst shorter than this refresh still shows.
+            if reading.trace:
+                samples.extend(reading.trace)
+            elif reading.percent is not None:
                 samples.append(reading.percent)
-                del samples[: max(0, len(samples) - self.HISTORY)]
-            graph.set_content(self._spark(samples))
+            del samples[: max(0, len(samples) - self.HISTORY)]
+            # Grey while the device is doing nothing: an unused accelerator should not read as live.
+            recent = samples[-20:]
+            busy = bool(reading.active) or (max(recent) > self.IDLE_PERCENT if recent else False)
+            colour = theme.TELEMETRY if busy else theme.MUTED
+            graph.set_content(self._spark(samples, colour))
             if reading.percent is None:
                 percent = "n/a"
             else:
                 # "~" marks a proxy reading (GPU clock ratio) rather than a true busy counter.
                 percent = f"{'~' if reading.approximate else ''}{reading.percent:.0f}%"
-            temperature = "" if reading.celsius is None else f"  {reading.celsius:.0f}°C"
+            # A device can be powered and working between two samples that both read 0%.
+            if reading.percent is not None and reading.percent < 1 and reading.active:
+                percent = "busy"
+            temperature = "" if reading.celsius is None else f" {reading.celsius:.0f}°C"
             value.set_text(f"{percent}{temperature}")
+            label.style(f"color: {colour}")
+            value.style(f"color: {colour if busy else theme.MUTED}")
 
 
 class ModelPicker:

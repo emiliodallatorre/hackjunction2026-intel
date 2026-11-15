@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sfogliatelle — π-0.5 Anomaly Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e12;
+    --surface: #1a1a19;
+    --ink: #f2f0ea;
+    --ink-2: #b9b6ad;
+    --ink-3: #807d75;
+    --accent: #ffd34d;      /* lego yellow */
+    --accent-2: #ff8a3d;    /* lego orange */
+    --cpu: #3987e5;
+    --gpu: #d95926;
+    --npu: #199e70;
+    --rec: #e66767;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+    --disp: "Space Grotesk", system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: var(--bg); color: var(--ink); font-family: var(--disp); overflow: hidden; }
+
+  /* ---------- deck scaffolding ---------- */
+  .slide {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column; justify-content: center; align-items: center;
+    padding: 5vh 7vw; gap: 3.5vh;
+    text-align: center;
+  }
+  .slide.active { display: flex; animation: slidein 420ms ease-out; }
+  @keyframes slidein { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+  .tw { font-size: clamp(22px, 3.4vw, 44px); font-weight: 600; line-height: 1.35; max-width: 28ch; min-height: 1.4em; }
+  .tw .caret { display: inline-block; width: 0.55ch; background: var(--accent); margin-left: 2px;
+               animation: blink 0.8s steps(1) infinite; height: 1em; vertical-align: -0.12em; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .sub { font-family: var(--mono); font-size: clamp(13px, 1.3vw, 18px); color: var(--ink-2); }
+  em.hot { font-style: normal; color: var(--accent); }
+  em.hot2 { font-style: normal; color: var(--accent-2); }
+
+  /* ---------- video slots ---------- */
+  .vslot {
+    position: relative; width: min(62vw, 110vh);
+    aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+    background: var(--surface); border: 1px solid #2c2c33;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 1; min-height: 0;
+  }
+  .vslot video { width: 100%; height: 100%; object-fit: cover; }
+  .vslot .missing {
+    position: absolute; inset: 0; display: none; flex-direction: column; gap: 10px;
+    align-items: center; justify-content: center; font-family: var(--mono);
+    color: var(--ink-3); font-size: clamp(12px, 1.2vw, 16px);
+    background:
+      repeating-linear-gradient(45deg, transparent 0 18px, #22222a 18px 36px);
+  }
+  .vslot.no-video .missing { display: flex; }
+  .vslot .missing b { color: var(--ink-2); font-weight: 600; }
+  .vslot .missing .cam { font-size: 34px; }
+
+  .recbadge {
+    position: absolute; top: 14px; left: 16px; z-index: 3;
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-weight: 600; letter-spacing: 2px;
+    color: var(--rec); font-size: clamp(14px, 1.5vw, 20px);
+  }
+  .recbadge::before { content: ""; width: 0.8em; height: 0.8em; border-radius: 50%;
+                      background: var(--rec); animation: blink 1s steps(1) infinite; }
+
+  /* ---------- title slide ---------- */
+  .bigtitle {
+    font-size: clamp(48px, 9vw, 130px); font-weight: 700; letter-spacing: 0.04em;
+    background: linear-gradient(100deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    position: relative;
+  }
+  .star { position: absolute; font-size: 0.35em; animation: twinkle 1.6s ease-in-out infinite; }
+  @keyframes twinkle { 0%,100% { transform: scale(0.6) rotate(0deg); opacity: 0.4; }
+                       50%     { transform: scale(1.15) rotate(25deg); opacity: 1; } }
+
+  /* ---------- tray split (slide 5) ---------- */
+  .trays { display: flex; gap: 2vw; font-size: clamp(18px, 2.2vw, 30px); font-family: var(--mono); }
+  .tray { padding: 1.2em 1.6em; border-radius: 12px; border: 2px solid; font-weight: 600;
+          transition: transform 700ms cubic-bezier(.2,1.4,.4,1), opacity 700ms; }
+  .tray.yellow { border-color: var(--accent); color: var(--accent); }
+  .tray.orange { border-color: var(--accent-2); color: var(--accent-2);
+                 opacity: 0; transform: translateX(-60%) scale(0.6); }
+  .slide.active .tray.orange { opacity: 1; transform: none; transition-delay: 1.1s; }
+
+  /* ---------- ANY brick morph (slide 6) ---------- */
+  .morph { font-size: clamp(26px, 4vw, 56px); font-family: var(--mono); font-weight: 600; }
+  .morph .the { display: inline-block; transition: opacity .5s, transform .5s; }
+  .morph .any { display: inline-block; color: var(--accent-2); font-weight: 700;
+                opacity: 0; transform: scale(2.2); transition: opacity .5s 1s, transform .5s 1s; width: 0; overflow: hidden; }
+  .slide.active .morph.go .the { opacity: 0; transform: translateY(-20px); position: absolute; }
+  .slide.active .morph.go .any { opacity: 1; transform: none; width: auto; }
+
+  .unicorn { font-size: clamp(50px, 7vw, 100px); animation: drop 1.2s cubic-bezier(.3,1.6,.4,1) both; }
+  @keyframes drop { from { transform: translateY(-70vh) rotate(-30deg); } to { transform: none; } }
+
+  /* ---------- charts ---------- */
+  .chart { width: min(68vw, 900px); text-align: left; font-family: var(--mono); }
+  .chart h3 { font-family: var(--disp); font-size: clamp(16px, 1.6vw, 22px); color: var(--ink);
+              margin-bottom: 4px; font-weight: 600; }
+  .chart .unit { font-size: clamp(11px, 1vw, 14px); color: var(--ink-3); margin-bottom: 14px; }
+  .row { display: grid; grid-template-columns: 5ch 1fr; align-items: center; gap: 12px; margin: 10px 0; }
+  .row .dev { font-size: clamp(13px, 1.2vw, 17px); color: var(--ink-2); text-align: right; }
+  .track { position: relative; height: 26px; border-left: 2px solid #3a3a42; }
+  .bar { height: 100%; width: 0; border-radius: 0 4px 4px 0;
+         transition: width 1100ms cubic-bezier(.2,.8,.2,1); }
+  .slide.active .bar { width: var(--w); }
+  .bar .val { position: absolute; left: calc(var(--w) + 10px); top: 50%; transform: translateY(-50%);
+              color: var(--ink); font-size: clamp(12px, 1.2vw, 16px); white-space: nowrap; }
+  .bar .val small { color: var(--ink-3); }
+  .cpu { background: var(--cpu); } .gpu { background: var(--gpu); } .npu { background: var(--npu); }
+  .verdict { font-family: var(--mono); font-size: clamp(13px, 1.4vw, 19px); color: var(--accent);
+             border: 1px dashed #3a3a42; border-radius: 10px; padding: 0.7em 1.2em; }
+  .chartpair { display: flex; gap: 4vw; flex-wrap: wrap; justify-content: center; }
+  .chartpair .chart { width: min(42vw, 520px); }
+  .editme { color: var(--rec); background: #2a1515; padding: 0 0.3em; border-radius: 6px; }
+
+  /* ---------- vibecoded (slide 14) ---------- */
+  .vibe { font-size: clamp(30px, 5vw, 70px); font-weight: 700; font-family: var(--mono); position: relative; }
+  .vibe .strike { position: relative; display: inline-block; }
+  .vibe .strike::after { content: ""; position: absolute; left: 0; top: 55%; height: 4px; width: 0;
+                         background: var(--rec); transition: width .5s ease 1.2s; }
+  .slide.active .vibe .strike::after { width: 100%; }
+  .vibe .fix { display: block; font-size: 0.55em; color: var(--accent); opacity: 0;
+               transition: opacity .6s ease 1.9s; }
+  .slide.active .vibe .fix { opacity: 1; }
+
+  .pushscene { font-size: clamp(26px, 4vw, 50px); position: relative; width: 60vw; height: 1.4em; }
+  .pushscene .claude { position: absolute; left: 44%; transition: transform 1.4s ease-in 2.6s, opacity 1.4s ease-in 2.6s; }
+  .pushscene .robot  { position: absolute; left: 20%; transition: transform 1.2s ease-in-out 2.4s; }
+  .slide.active .pushscene .robot  { transform: translateX(16vw); }
+  .slide.active .pushscene .claude { transform: translateX(45vw) rotate(50deg); opacity: 0; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+         font-family: var(--mono); font-size: 12px; color: var(--ink-3); z-index: 10;
+         display: flex; gap: 18px; user-select: none; }
+  #hud b { color: var(--ink-2); font-weight: 600; }
+  #progress { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+              width: 0; z-index: 10; transition: width .3s; }
+  .pill { border: 1px solid #2c2c33; border-radius: 99px; padding: 2px 10px; }
+  .pill.on { color: var(--accent); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<!-- 1 · intro -->
+<section class="slide" data-dur="5" data-say="Hi! I'm pi zero point five. I'm the model trained to run on this robot, by the team...">
+  <p class="tw" data-type="Hi, I'm π-0.5 — the model trained to run on this robot, by the team…"></p>
+  <div class="vslot" data-src="01-intro.mp4">
+    <video muted loop playsinline></video>
+    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/01-intro.mp4</b></span><span>(robot + camera hero shot)</span></div>
+  </div>
+</section>
+
+<!-- 2 · team name -->
+<section class="slide" data-dur="3.5" data-say="Sfogliatelle!">
+  <h1 class="bigtitle">SFOGLIATELLE
+    <span class="star" style="top:-0.4em; left:-0.5em;">✦</span>
+    <span class="star" style="top:-0.2em; right:-0.7em; animation-delay:.4s;">✧</span>
+    <span class="star" style="bottom:-0.3em; left:30%; animation-delay:.8s;">✦</span>
+  </h1>
+  <p class="sub">HackJunction 2026 × Intel</p>
+</section>
+
+<!-- 3 · mission -->
+<section class="slide" data-dur="4.5" data-say="...to detect anomalies in my trail of lego bricks. Which has to be. PERFECT.">
+  <p class="tw" data-type="…to detect anomalies in my trail of LEGO bricks, which has to be |PERFECT.|"></p>
+</section>
+
+<!-- 4 · two things -->
+<section class="slide" data-dur="6" data-say="I'm really simple. I can only do two things. Pick the brick. And put the brick in the yellow tray.">
+  <p class="tw" data-type="I'm really simple. I can only do two things:"></p>
+  <p class="sub">pick the brick · put the brick in the <em class="hot">yellow</em> tray</p>
+  <div class="vslot" data-src="02-pick-place.mp4">
+    <video muted loop playsinline></video>
+    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/02-pick-place.mp4</b></span><span>(pick brick → yellow tray)</span></div>
+  </div>
+</section>
+
+<!-- 5 · maybe three -->
+<section class="slide" data-dur="5" data-say="...ok. Maybe three.">
+  <p class="tw" data-type="…ok, maybe three."></p>
+  <div class="trays">
+    <div class="tray yellow">yellow tray</div>
+    <div class="tray orange">orange tray</div>
+  </div>
+  <div class="vslot" data-src="03-orange-tray.mp4">
+    <video muted loop playsinline></video>
+    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/03-orange-tray.mp4</b></span><span>(the orange tray appears)</span></div>
+  </div>
+</section>
+
+<!-- 6 · or four -->
+<section class="slide" data-dur="4" data-say="...or four.">
+  <p class="tw" data-type="…or four."></p>
+  <p class="morph" id="morph">pick <span class="the">the</span><span class="any">ANY</span> brick</p>
+</section>
+
+<!-- 7 · or more / full run -->
+<section class="slide" data-dur="11" data-say="...or more. Here's the whole process, end to finish. No editing. I promise.">
+  <p class="tw" data-type="…or more."></p>
+  <div class="unicorn">🦄</div>
+  <div class="vslot" data-src="04-full-run.mp4">
+    <div class="recbadge">REC</div>
+    <video muted loop playsinline></video>
+    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/04-full-run.mp4</b></span><span>(full run, unicorn distractor, bricks everywhere — one take)</span></div>
+  </div>
+</section>
+
+<!-- 8 · anomaly detection -->
+<section class="slide" data-dur="15" data-say="I autonomously do anomaly detection using Anomalib: a PatchCore model trained on just a few samples of our own bricks. It tells healthy bricks... from defective ones.">
+  <p class="tw" data-type="I do anomaly detection with |Anomalib| — PatchCore on wide_resnet50_2, trained on just a few good samples."></p>
+  <p class="sub">healthy brick ✅ &nbsp;vs&nbsp; defective brick <em class="hot2">(angry face incoming)</em> 😠</p>
+  <div class="vslot" data-src="05-anomaly-sidebyside.mp4">
+    <video muted loop playsinline></video>
+    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/05-anomaly-sidebyside.mp4</b></span><span>(RGB feed ⬌ heatmap, person draws angry face on brick)</span></div>
+  </div>
+</section>
+
+<!-- 9 · training (male voice) -->
+<section class="slide" data-dur="13" data-voice="male" data-say="Training was done with Physical A I Studio, Intel's tool to visualize robots, handle cameras, and train tasks end to end. We recorded 156 episodes, used to finetune a pretrained pi zero point five — on some conveniently lent top-tier hardware, thanks to Modal.">
+  <p class="tw" data-type="Trained with |Physical AI Studio| — 156 recorded episodes, finetuning a pretrained π-0.5."></p>
+  <p class="sub">cameras + robot + task training, end to end · GPUs conveniently lent via <em class="hot">Modal</em></p>
+  <div class="vslot" data-src="06-training.mp4">
+    <video muted loop playsinline></video>
+    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/06-training.mp4</b></span><span>(Physical AI Studio screen capture)</span></div>
+  </div>
+</section>
+
+<!-- 10 · the hardware -->
+<section class="slide" data-dur="8" data-say="And all of this runs in real time, on the new Intel Core Ultra X9 388H. An integrated GPU, and an NPU, on one chip.">
+  <p class="tw" data-type="All of this runs in |real time| on the Intel Core Ultra X9 388H."></p>
+  <p class="sub">iGPU (Arc, 96 EU) + NPU (AI Boost) + 16-core CPU — one laptop chip, measured by us, on the robot</p>
+</section>
+
+<!-- 11 · pi05 benchmark -->
+<section class="slide" data-dur="13" data-say="Running the V L A on the integrated GPU was a no brainer. 105 milliseconds per inference, against 8 seconds on CPU. 77 times faster. With 50 action chunks, that's 476 actions per second — using just 6 percent of the real-time budget at 30 hertz.">
+  <div class="chart">
+    <h3>π-0.5 inference — where to run a 6.3 GB VLA?</h3>
+    <div class="unit">latency p50, ms — lower is better (measured, OpenVINO 2026.4, batch 1)</div>
+    <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:1.4%"><span class="val">105 ms <small>· 39.8 W · max 70 °C</small></span></div></div></div>
+    <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:70%"><span class="val">8 104 ms <small>· 77× slower</small></span></div></div></div>
+    <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:0%"><span class="val"><small>not measured — 6.3 GB of weights is no NPU-shaped workload</small></span></div></div></div>
+  </div>
+  <p class="verdict">50-action chunks → 476 actions/s · 6.3 % of the 30 Hz control budget · p99/p50 jitter 1.02×</p>
+</section>
+
+<!-- 12 · patchcore benchmark -->
+<section class="slide" data-dur="14" data-say="Anomaly detection runs on the NPU. Sure, the iGPU is faster — but the iGPU is busy driving me. The NPU checks over 5 bricks per second, needs 42 percent less energy than the CPU, and leaves the GPU alone.">
+  <div class="chartpair">
+    <div class="chart">
+      <h3>PatchCore latency</h3>
+      <div class="unit">p50, ms — lower is better</div>
+      <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:21%"><span class="val">54 ms <small>(busy with π-0.5!)</small></span></div></div></div>
+      <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:43%"><span class="val">110 ms</span></div></div></div>
+      <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:72%"><span class="val">182 ms</span></div></div></div>
+    </div>
+    <div class="chart">
+      <h3>PatchCore energy</h3>
+      <div class="unit">mJ per inference — lower is better</div>
+      <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:28%"><span class="val">1 711</span></div></div></div>
+      <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:72%"><span class="val">4 383</span></div></div></div>
+      <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:42%"><span class="val">2 535 <small>· −42 % vs CPU</small></span></div></div></div>
+    </div>
+  </div>
+  <p class="verdict">NPU: 5.5 checks/s, zero contention with the VLA on the iGPU — the whole pipeline on one chip</p>
+</section>
+
+<!-- 13 · compile speedup -->
+<section class="slide" data-dur="9" data-say="That's it? No! We further compiled the model to fit the new Intel platform, going beyond the standard OpenVINO export from Physical A I Studio.">
+  <p class="tw" data-type="That's it? |No!| We further compiled the model for the new Intel platform…"></p>
+  <p class="verdict">…achieving a <span class="editme">&nbsp;N×&nbsp;</span> speedup over the stock Physical AI Studio OpenVINO export
+    <br><small style="color:var(--ink-3)">⚠ fill in the measured number before recording — placeholder on purpose</small></p>
+</section>
+
+<!-- 14 · dashboard -->
+<section class="slide" data-dur="14" data-say="On top of that we... vibecoded... I mean, meticulously prompted... BUILT! A pretty dashboard, to display status, results, and promptly alert the user when there's an anomaly." data-alarm="1">
+  <p class="vibe">we <span class="strike">vibecoded</span><span class="fix">*meticulously prompted</span></p>
+  <p class="tw" data-type="…BUILT a dashboard: status, results, and a |comically loud| anomaly alert."></p>
+  <div class="vslot" data-src="07-dashboard.mp4">
+    <video muted loop playsinline></video>
+    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/07-dashboard.mp4</b></span><span>(long Claude prompt + dashboard + loud alert)</span></div>
+  </div>
+  <div class="pushscene"><span class="robot">🦾</span><span class="claude">✳️</span></div>
+</section>
+
+<!-- 15 · outro -->
+<section class="slide" data-dur="6" data-say="Pi zero point five. Anomalib. One Intel chip. Team Sfogliatelle. Thank you!">
+  <h1 class="bigtitle" style="font-size:clamp(34px,6vw,84px);">π-0.5 + Anomalib<br>on one chip</h1>
+  <p class="sub">team <em class="hot">Sfogliatelle</em> · HackJunction 2026 · Intel Core Ultra X9 388H</p>
+</section>
+
+<div id="hud">
+  <span class="pill"><b>←/→</b> navigate</span>
+  <span class="pill" id="pill-audio"><b>A</b> audio: off</span>
+  <span class="pill" id="pill-auto"><b>P</b> autoplay: off</span>
+  <span class="pill"><b>F</b> fullscreen</span>
+  <span id="count"></span>
+</div>
+
+<script>
+const slides = [...document.querySelectorAll('.slide')];
+let cur = -1, audioOn = false, autoOn = false, autoTimer = null, typeTimer = null;
+const synth = window.speechSynthesis;
+let voices = [], voiceRobot = null, voiceMale = null;
+
+function pickVoices() {
+  voices = synth.getVoices().filter(v => v.lang.startsWith('en'));
+  voiceRobot = voices.find(v => /female|zira|samantha|google uk english female/i.test(v.name)) || voices[0] || null;
+  voiceMale  = voices.find(v => v !== voiceRobot && /male|david|daniel|google uk english male/i.test(v.name))
+            || voices.find(v => v !== voiceRobot) || voiceRobot;
+}
+pickVoices();
+synth.onvoiceschanged = pickVoices;
+
+/* -- typewriter: |hot| spans get the accent color -- */
+function typewrite(el, done) {
+  const spec = el.dataset.type;
+  el.innerHTML = '';
+  const caret = document.createElement('span'); caret.className = 'caret'; caret.innerHTML = '&nbsp;';
+  el.appendChild(caret);
+  let i = 0, hot = false, node = document.createTextNode('');
+  el.insertBefore(node, caret);
+  clearInterval(typeTimer);
+  typeTimer = setInterval(() => {
+    if (i >= spec.length) { clearInterval(typeTimer); if (done) done(); return; }
+    const ch = spec[i++];
+    if (ch === '|') {
+      hot = !hot;
+      if (hot) { const em = document.createElement('em'); em.className = 'hot'; el.insertBefore(em, caret); node = document.createTextNode(''); em.appendChild(node); }
+      else { node = document.createTextNode(''); el.insertBefore(node, caret); }
+    } else node.textContent += ch;
+  }, 34);
+}
+
+/* -- comically loud anomaly alarm (WebAudio siren) -- */
+function alarm() {
+  if (!audioOn) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = ctx.createOscillator(), gain = ctx.createGain(), lfo = ctx.createOscillator(), lfoG = ctx.createGain();
+  osc.type = 'square'; osc.frequency.value = 820;
+  lfo.frequency.value = 5; lfoG.gain.value = 320;
+  lfo.connect(lfoG); lfoG.connect(osc.frequency);
+  gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 2.2);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(); lfo.start();
+  osc.stop(ctx.currentTime + 2.3); lfo.stop(ctx.currentTime + 2.3);
+}
+
+function speak(slide, onend) {
+  synth.cancel();
+  if (!audioOn || !slide.dataset.say) { if (onend) onend(); return; }
+  const u = new SpeechSynthesisUtterance(slide.dataset.say);
+  const male = slide.dataset.voice === 'male';
+  u.voice = male ? voiceMale : voiceRobot;
+  u.rate = 1.0; u.pitch = male ? 0.7 : 0.85;
+  u.onend = () => { if (onend) onend(); };
+  synth.speak(u);
+}
+
+function show(n) {
+  if (n < 0 || n >= slides.length) return;
+  clearTimeout(autoTimer); clearInterval(typeTimer); synth.cancel();
+  if (cur >= 0) {
+    slides[cur].classList.remove('active');
+    slides[cur].querySelectorAll('video').forEach(v => v.pause());
+    const m = slides[cur].querySelector('#morph, .morph'); if (m) m.classList.remove('go');
+  }
+  cur = n;
+  const s = slides[cur];
+  s.classList.add('active');
+  document.getElementById('count').textContent = (cur + 1) + ' / ' + slides.length;
+  document.getElementById('progress').style.width = ((cur + 1) / slides.length * 100) + '%';
+
+  /* videos: lazy-load, show placeholder if the file isn't there yet */
+  s.querySelectorAll('.vslot').forEach(slot => {
+    const v = slot.querySelector('video');
+    if (!v.src) {
+      v.src = slot.dataset.src;
+      v.onerror = () => slot.classList.add('no-video');
+      v.onloadeddata = () => slot.classList.remove('no-video');
+    }
+    v.play().catch(() => {});
+  });
+
+  const tw = s.querySelector('.tw[data-type]');
+  if (tw) typewrite(tw);
+  const morph = s.querySelector('.morph');
+  if (morph) setTimeout(() => morph.classList.add('go'), 1200);
+  if (s.dataset.alarm) setTimeout(alarm, 2500);
+
+  /* advance: narration end (if audio) or scripted duration */
+  const dur = (parseFloat(s.dataset.dur) || 6) * 1000;
+  const next = () => { if (autoOn && cur < slides.length - 1) autoTimer = setTimeout(() => show(cur + 1), 600); };
+  if (audioOn && s.dataset.say) speak(s, next);
+  else { speak(s, null); if (autoOn) autoTimer = setTimeout(next, dur); }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); autoOn = false; syncPills(); show(cur + 1); }
+  else if (e.key === 'ArrowLeft') { autoOn = false; syncPills(); show(cur - 1); }
+  else if (e.key.toLowerCase() === 'a') { audioOn = !audioOn; syncPills(); if (!audioOn) synth.cancel(); else speak(slides[cur], autoOn ? () => show(cur + 1) : null); }
+  else if (e.key.toLowerCase() === 'p') { autoOn = !autoOn; syncPills(); if (autoOn) show(cur); }
+  else if (e.key.toLowerCase() === 'f') {
+    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
+  } else if (e.key === 'Home') show(0);
+  else return;
+});
+document.addEventListener('click', () => { if (cur < slides.length - 1 && !autoOn) show(cur + 1); });
+
+function syncPills() {
+  document.getElementById('pill-audio').classList.toggle('on', audioOn);
+  document.getElementById('pill-audio').innerHTML = '<b>A</b> audio: ' + (audioOn ? 'on' : 'off');
+  document.getElementById('pill-auto').classList.toggle('on', autoOn);
+  document.getElementById('pill-auto').innerHTML = '<b>P</b> autoplay: ' + (autoOn ? 'on' : 'off');
+}
+show(Math.min(slides.length - 1, Math.max(0, parseInt(location.hash.slice(1), 10) || 0)));
+</script>
+</body>
+</html>

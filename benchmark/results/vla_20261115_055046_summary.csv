@@ -1,0 +1,3 @@
+device,ir,role,primary,precision,execution_devices,p50_ms,p95_ms,p99_ms,seq_fps,peak_fps,actions_per_s,duty_p99_pct,max_control_fps_p99,realtime_p99,compile_cold_ms,compile_warm_ms,first_infer_ms,mj_per_inference,sustained_drop_pct,peak_temp_c,peak_gpu_temp_c,e2e_p50_ms
+GPU,pi05.xml,,True,<Type: 'float16'>,GPU.0,104.95,106.47,106.76,9.508,9.164,476.4,6.41,468.3,True,12481.8,1398.1,129.1,4185.7,27.5,70.0,26.8,nan
+CPU,pi05.xml,,True,<Type: 'float32'>,CPU,8103.69,8118.84,8126.21,0.123,0.246,6.2,487.57,6.2,False,6083.1,1379.8,8041.6,237786.3,0.3,98.0,26.8,nan

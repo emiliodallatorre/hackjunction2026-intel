@@ -46,7 +46,9 @@ train:
   num_workers: 4
 
 inference:
-  device: CPU           # OpenVINO device: CPU, GPU, NPU or AUTO
+  device: NPU           # OpenVINO device: CPU, GPU, NPU or AUTO. PatchCore is small and runs
+                        # a few times per brick, so the NPU is enough and leaves the iGPU to the
+                        # policy: both models run at once while the brick is presented.
   # Anomaly when score >= threshold. null = the threshold learned in training (0.5 on the
   # normalised scale). Read when the station / brick-ad command starts: restart to apply.
   threshold: null
