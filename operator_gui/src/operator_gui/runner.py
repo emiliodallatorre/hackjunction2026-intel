@@ -2,10 +2,12 @@
 
     python -m operator_gui.runner --events-fd N (--export PATH | --dry-run) cycles
     python -m operator_gui.runner --events-fd N (--export PATH | --dry-run) action "Move any brick to the center" [--duration S]
+    python -m operator_gui.runner --events-fd N (--export PATH | --dry-run) reset [--home FILE]
 
 ``cycles`` builds one ``PolicyRunner`` and calls ``run_model.run_cycle`` again and again until it
 receives SIGUSR1 (finish the current cycle, then exit) or a cycle fails. ``action`` runs one
-free-text instruction with ``run_model.run_task``. SIGINT stops at once, the way run_model handles
+free-text instruction with ``run_model.run_task``; ``reset`` moves the arm to its saved home pose
+with ``run_model.reset_robot``. SIGINT stops at once, the way run_model handles
 Ctrl-C: the runtime is interrupted and the arm is told to hold its measured position.
 
 The workflow is only observed:
@@ -127,6 +129,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     action = modes.add_parser("action", help="Run one free-text instruction")
     action.add_argument("task")
     action.add_argument("--duration", type=float, default=run_model.DEFAULT_DURATION_S)
+    reset = modes.add_parser("reset", help="Move the arm to its saved home pose")
+    reset.add_argument("--home", type=Path, default=run_model.DEFAULT_HOME_FILE)
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -142,6 +146,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 reporter.stage(events.ACTION)
                 run_model.run_task(runner, args.task, duration_s=args.duration)
                 message = "Action finished"
+            elif args.mode == "reset":
+                reporter.stage(events.RESET)
+                run_model.reset_robot(runner, home_file=args.home)
+                message = "Arm is at its home pose"
             else:
                 count = run_cycles(runner, finish)
                 message = f"Auto cycle ended after {count} cycle{'s' if count != 1 else ''}"

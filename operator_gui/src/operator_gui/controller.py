@@ -5,6 +5,7 @@
 * ``finish_auto()`` sends SIGUSR1: the current cycle completes, then the loop ends. Until it does,
   ``Status.draining`` is True and nothing else can be started.
 * ``run_action(text)`` starts ``... action <text>``: one ``run_model.run_task``.
+* ``reset()`` starts ``... reset``: ``run_model.reset_robot`` back to the saved home pose.
 * ``stop()`` sends SIGINT, which run_model handles like Ctrl-C (the policy stops and the arm is
   told to hold its measured position); if the runner has not exited after STOP_GRACE_S it is
   terminated, then killed. ``stop(force=True)`` while stopping kills it at once.
@@ -37,6 +38,7 @@ STAGE_MESSAGES = {
     events.PLACE_GOOD: "Placing the brick in the good dish",
     events.PLACE_BAD: "Placing the brick in the defective dish",
     events.ACTION: "Running action",
+    events.RESET: "Resetting the arm to its home pose",
 }
 
 
@@ -49,6 +51,7 @@ class Phase(str, Enum):
 class Kind(str, Enum):
     AUTO = "auto"  # the auto-cycle loop
     ACTION = "action"  # one free-text instruction on the policy
+    RESET = "reset"  # the arm moving back to its home pose
 
 
 @dataclass
@@ -74,17 +77,19 @@ class Status:
 
 class CycleController:
     def __init__(self, source_args: Sequence[str], history: History, python: str = sys.executable,
-                 action_duration_s: float = ACTION_DURATION_S):
+                 action_duration_s: float = ACTION_DURATION_S, home_file: str | os.PathLike | None = None):
         """
         Args:
             source_args: ``["--export", PATH]`` or ``["--dry-run"]``, passed to every runner.
             history: Where sorted bricks are recorded.
             python: Interpreter for the runner (default: this one, so the same environment).
             action_duration_s: Control seconds a free-text action runs for.
+            home_file: Home pose file for reset (default: run_model's, relative to the working directory).
         """
         self.source_args = list(source_args)
         self.history = history
         self.action_duration_s = action_duration_s
+        self.home_file = home_file
         self._python = python
         self._lock = threading.Lock()
         self._status = Status()
@@ -125,6 +130,11 @@ class CycleController:
             raise ValueError("Type an action first")
         self._launch(Kind.ACTION, ["action", task, "--duration", str(self.action_duration_s)],
                      f"Running action: {task}")
+
+    def reset(self) -> None:
+        """Move the arm back to its saved home pose."""
+        home = ["--home", os.fspath(self.home_file)] if self.home_file is not None else []
+        self._launch(Kind.RESET, ["reset", *home], "Resetting the arm to its home pose")
 
     def _launch(self, kind: Kind, mode_args: Sequence[str], message: str) -> None:
         with self._lock:

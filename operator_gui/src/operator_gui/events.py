@@ -19,6 +19,7 @@ RESULT = "result"  # outcome, message: the last event of a cycle
 PRESENT, INSPECT, PLACE_GOOD, PLACE_BAD = "present", "inspect", "place_good", "place_bad"
 PLACEMENTS = (PLACE_GOOD, PLACE_BAD)
 ACTION = "action"  # a free-text instruction run on the policy, outside the sorting cycle
+RESET = "reset"  # the arm moving back to its home pose
 
 # Outcomes of a cycle.
 DONE, STOPPED, ERROR = "done", "stopped", "error"
