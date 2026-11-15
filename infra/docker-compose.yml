@@ -27,9 +27,10 @@ services:
       - physical-ai-studio-storage:/app/storage
       - ${HOME}/.cache/huggingface/lerobot/calibration:/home/appuser/.cache/huggingface/lerobot/calibration:ro
       # Paths are relative to the repository root (the run script's --project-directory).
-      # Config paths resolve against /brick, so the model must sit at /brick/models/patchcore.
+      # Config paths resolve against /brick: all model versions are mounted, and paths.model in
+      # config.yaml picks one (models/patchcore-v2, or models/patchcore for v1).
       - ./anomaly_detection/config.yaml:/brick/config.yaml:ro
-      - ./anomaly_detection/models/patchcore:/brick/models/patchcore:ro
+      - ./anomaly_detection/models:/brick/models:ro
       # Privileged containers get /dev nodes but not udev's by-id symlinks used as the camera source.
       - /dev/v4l:/dev/v4l:ro
     group_add:

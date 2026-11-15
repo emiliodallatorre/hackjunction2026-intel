@@ -50,7 +50,7 @@ After the movement is detected, the arm returns to the pose captured before the 
 
 During placement, the release check logs the initial gripper position, sampled positions and timing, and a summary when the stage ends or is interrupted. These diagnostics use the existing gripper observations and do not change the completion condition.
 
-The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): without it the model never reports `EMPTY`, so the cycle aborts before moving. The config comes from `$BRICK_AD_CONFIG`, else `anomaly_detection/config.yaml`, with the model at `anomaly_detection/models/patchcore/`. The model is versioned with Git LFS: run `git lfs install` before cloning, or `git lfs pull` afterwards. [docker-compose.yml](infra/docker-compose.yml) mounts both into the Studio container at `/brick` and sets `BRICK_AD_CONFIG`.
+The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): without it the model never reports `EMPTY`, so the cycle aborts before moving. The config comes from `$BRICK_AD_CONFIG`, else `anomaly_detection/config.yaml`, with the model chosen by `paths.model` there: `anomaly_detection/models/patchcore-v2/` (current, larger ROI) or `models/patchcore/` (v1). The model is versioned with Git LFS: run `git lfs install` before cloning, or `git lfs pull` afterwards. [docker-compose.yml](infra/docker-compose.yml) mounts both into the Studio container at `/brick` and sets `BRICK_AD_CONFIG`.
 
 ### Remote inspection demo
 
