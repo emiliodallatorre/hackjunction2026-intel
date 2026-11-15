@@ -13,17 +13,56 @@ on-demand analysis needs no second camera holder. The verdict is published as ``
 """
 
 import argparse
+import contextlib
 import logging
 import signal
 import sys
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 PREVIEW_FPS = 10.0
 ANALYZE_SIGNAL = signal.SIGUSR1  # must match controller.ANALYZE_SIGNAL
+# A V4L2 device is not immediately reopenable after the previous holder closes it, so the first
+# open (or first frame) right after a run can fail. Retry for a while before giving up.
+OPEN_RETRY_S = 15.0
+OPEN_RETRY_DELAY_S = 1.0
+
+
+@contextmanager
+def _opened_station(anomaly_detection: Any) -> Iterator[Any]:
+    """Open the inspection station, retrying while the camera is still held by a finished run.
+
+    Closing a V4L2 device does not make it instantly reopenable, so a preview starting right after
+    a policy stage can open the camera and get no frame. Both failures are transient here.
+    """
+    deadline = time.monotonic() + OPEN_RETRY_S
+    attempt = 0
+    while True:
+        attempt += 1
+        station = None
+        try:
+            station = anomaly_detection.InspectionStation()
+            station.__enter__()
+            station.camera.read()  # prove it delivers frames before the dashboard trusts it
+            break
+        except Exception as error:  # noqa: BLE001
+            if station is not None:
+                with contextlib.suppress(Exception):
+                    station.__exit__(None, None, None)
+            if time.monotonic() >= deadline:
+                raise
+            logger.info("Camera not ready yet (attempt %d): %s", attempt, error)
+            time.sleep(OPEN_RETRY_DELAY_S)
+    try:
+        yield station
+    finally:
+        with contextlib.suppress(Exception):
+            station.__exit__(None, None, None)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -57,7 +96,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     period = 1.0 / max(args.fps, 1.0)
     try:
-        with anomaly_detection.InspectionStation() as station:
+        with _opened_station(anomaly_detection) as station:
             while True:
                 started = time.monotonic()
                 station.camera.read()

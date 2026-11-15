@@ -26,6 +26,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -36,6 +37,7 @@ from .history import DEFECTIVE, GOOD, History
 from .models import Model
 
 PREVIEW_GRACE_S = 3.0  # time for the preview to release the camera
+PREVIEW_RESTART_DELAY_S = 1.5  # let the kernel release the camera before previewing again
 ANALYZE_SIGNAL = signal.SIGUSR1  # must match preview.ANALYZE_SIGNAL
 STOP_GRACE_S = 5.0  # time for the runtime to stop the policy, hold the arm and disconnect
 TERMINATE_GRACE_S = 2.0
@@ -344,7 +346,9 @@ class CycleController:
             if status.outcome is None:  # killed, or crashed before reporting
                 status.outcome = events.STOPPED if code < 0 else events.ERROR
                 status.message = f"Runner exited unexpectedly (code {code})"
-        # The runner has released the camera: idle streaming can resume.
+        # The runner's process has exited, but the kernel may not have released its V4L2 device
+        # yet; the preview retries on its own, this just avoids the usual first failed open.
+        time.sleep(PREVIEW_RESTART_DELAY_S)
         self.start_preview()
 
     def _apply(self, event: events.Event) -> None:
