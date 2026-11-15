@@ -2,7 +2,8 @@
 data/
 runs/
 models/*
-# The deployed model is versioned with Git LFS; its OpenVINO compile cache is not.
-!models/patchcore/
-models/patchcore/ov_cache/
+# Model versions (models/patchcore, models/patchcore-v2, ...) are versioned with Git LFS;
+# their OpenVINO compile caches and local archives are not.
+!models/*/
+models/*/ov_cache/
 heatmaps/

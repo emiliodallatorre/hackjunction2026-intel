@@ -23,7 +23,7 @@ camera:
 
 # Crop region [x, y, w, h] in camera pixels around the spot where the arm presents the brick.
 # Set it interactively with `brick-ad roi`. null = use the whole frame.
-roi: [527, 276, 247, 232]
+roi: [505, 250, 332, 323]
 
 collect:
   burst_interval: 0.3   # seconds between saved frames while burst capture is on
@@ -55,4 +55,4 @@ paths:
   raw: data/raw              # full camera frames: raw/good, raw/anomaly, raw/empty
   dataset: data/dataset      # cropped split: train/{good,empty}, test/{good,anomaly,empty}
   runs: runs                 # anomalib training runs
-  model: models/patchcore    # exported OpenVINO model + metadata.json
+  model: models/patchcore-v2 # exported OpenVINO model + metadata.json; models/patchcore = v1 (old ROI)

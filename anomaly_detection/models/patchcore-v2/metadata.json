@@ -1,0 +1,29 @@
+{
+  "model": "Patchcore",
+  "backbone": "wide_resnet50_2",
+  "layers": [
+    "layer2",
+    "layer3"
+  ],
+  "coreset_sampling_ratio": 0.1,
+  "image_size": 256,
+  "roi": [
+    505,
+    250,
+    332,
+    323
+  ],
+  "threshold": 0.5,
+  "dataset_counts": {
+    "train/good": 181,
+    "test/good": 45,
+    "test/anomaly": 57,
+    "train/empty": 20,
+    "test/empty": 5
+  },
+  "anomalib_test_metrics": {
+    "image_AUROC": 1.0,
+    "image_F1Score": 0.991150438785553
+  },
+  "trained_at": "2026-11-15T03:26:06"
+}

@@ -1,0 +1,8 @@
+{
+  "threshold": 0.20159912109375,
+  "pixel_delta": 25,
+  "n_empty": 20,
+  "n_bricks": 181,
+  "empty_max": 1.0,
+  "brick_min": 0.20159912109375
+}
