@@ -11,6 +11,7 @@ TEXT = "#F2F0EA"
 MUTED = "#8A9099"
 ACCENT = "#FFC72C"
 GOOD = "#5AB4F0"
+TELEMETRY = "#4CC2FF"  # device usage graphs in the top bar
 DEFECTIVE = "#FF7A1A"
 DANGER = "#E5484D"
 

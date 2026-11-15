@@ -62,6 +62,72 @@ class Stepper:
                 step.classes("active")
 
 
+class DeviceMeters:
+    """CPU / iGPU / NPU usage sparklines with a temperature readout, for the top bar.
+
+    Each device keeps the last HISTORY samples and draws them as an inline SVG polyline, so there
+    is no charting dependency and the markup stays small enough to refresh a few times a second.
+    A device whose counters the kernel does not expose shows "n/a" instead of a misleading 0%.
+    """
+
+    HISTORY = 40
+    WIDTH = 68
+    HEIGHT = 22
+
+    def __init__(self) -> None:
+        from ..telemetry import Telemetry
+
+        self._telemetry = Telemetry()
+        self._history: dict[str, list[float]] = {}
+        self._rows: dict[str, tuple[Any, Any]] = {}
+        with ui.row().classes("items-center gap-4 no-wrap"):
+            for name in ("CPU", "iGPU", "NPU"):
+                with ui.column().classes("items-start gap-0"):
+                    with ui.row().classes("items-center gap-1 no-wrap"):
+                        ui.label(name).classes("caption").style(f"color: {theme.TELEMETRY}")
+                        value = ui.label("--").classes("mono text-xs")
+                    graph = ui.html("").classes("leading-none")
+                    self._rows[name] = (graph, value)
+
+    def _spark(self, samples: list[float]) -> str:
+        """The samples as an SVG polyline, newest on the right."""
+        w, h = self.WIDTH, self.HEIGHT
+        if not samples:
+            return (f'<svg width="{w}" height="{h}"><rect width="{w}" height="{h}" rx="3" '
+                    f'fill="{theme.TELEMETRY}14"/></svg>')
+        step = w / max(len(samples) - 1, 1)
+        points = " ".join(
+            f"{i * step:.1f},{h - 1 - (min(max(v, 0.0), 100.0) / 100.0) * (h - 2):.1f}"
+            for i, v in enumerate(samples)
+        )
+        # The filled area closes down to the baseline, so a flat trace still reads as a graph.
+        area = f"0,{h} {points} {(len(samples) - 1) * step:.1f},{h}"
+        return (
+            f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
+            f'<rect width="{w}" height="{h}" rx="3" fill="{theme.TELEMETRY}14"/>'
+            f'<polygon points="{area}" fill="{theme.TELEMETRY}33"/>'
+            f'<polyline points="{points}" fill="none" stroke="{theme.TELEMETRY}" '
+            f'stroke-width="1.5" stroke-linejoin="round"/>'
+            f"</svg>"
+        )
+
+    def refresh(self, status: Status) -> None:
+        for reading in self._telemetry.read():
+            graph, value = self._rows[reading.name]
+            samples = self._history.setdefault(reading.name, [])
+            if reading.percent is not None:
+                samples.append(reading.percent)
+                del samples[: max(0, len(samples) - self.HISTORY)]
+            graph.set_content(self._spark(samples))
+            if reading.percent is None:
+                percent = "n/a"
+            else:
+                # "~" marks a proxy reading (GPU clock ratio) rather than a true busy counter.
+                percent = f"{'~' if reading.approximate else ''}{reading.percent:.0f}%"
+            temperature = "" if reading.celsius is None else f"  {reading.celsius:.0f}°C"
+            value.set_text(f"{percent}{temperature}")
+
+
 class ModelPicker:
     """Chooses which Studio export the next run uses. Disabled while anything is running."""
 

@@ -6,10 +6,11 @@ from nicegui.events import KeyEventArguments
 from .. import events
 from ..controller import CycleController, Phase, Status
 from . import theme
-from .widgets import (BrickTable, Controls, Kpis, LiveView, LogPanel, ModelPicker, Stepper,
-                      StatusPill, VerdictPanel)
+from .widgets import (BrickTable, Controls, DeviceMeters, Kpis, LiveView, LogPanel, ModelPicker,
+                      Stepper, StatusPill, VerdictPanel)
 
 REFRESH_S = 0.1
+METERS_S = 1.0  # device usage sampling interval
 THUMBNAILS_URL = "/thumbnails"
 STOP_KEYS = ("Escape", " ")
 
@@ -26,6 +27,7 @@ class Dashboard:
                 ui.icon("view_in_ar", size="28px").style(f"color: {theme.ACCENT}")
                 ui.label("Brick Sorter").classes("text-xl font-bold")
                 ui.label("operator").classes("mono muted")
+            self.meters = DeviceMeters()
             self.stepper = Stepper()
             with ui.row().classes("items-center gap-3"):
                 mode = "DRY RUN" if controller.dry_run else "ROBOT"
@@ -54,6 +56,9 @@ class Dashboard:
                        self.controls, self.picker)
         ui.keyboard(on_key=self._on_key)
         ui.timer(REFRESH_S, self.refresh)
+        # Device usage changes while the status does not, so it cannot ride on self.refresh,
+        # which returns early when nothing changed.
+        ui.timer(METERS_S, lambda: self.meters.refresh(self.controller.status))
 
     def refresh(self) -> None:
         status = self.controller.status
