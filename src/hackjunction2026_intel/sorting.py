@@ -46,6 +46,7 @@ class PresenceWatch:
 
     The sorting cycle passes "inspection is not EMPTY". Pass the watch as the runtime's ``stop_event``.
     A polling error also stops the run, and is kept in ``error``.
+    ``after_first_tick`` defers polling until the runtime has completed its first control tick.
     """
 
     def __init__(
@@ -54,17 +55,30 @@ class PresenceWatch:
         hold_s: float,
         poll_s: float = PRESENCE_POLL_S,
         clock: Callable[[], float] = time.monotonic,
+        *,
+        after_first_tick: bool = False,
     ):
         self._is_present = is_present
         self._hold_s = hold_s
         self._poll_s = poll_s
         self._clock = clock
+        self._after_first_tick = after_first_tick
+        self._first_runtime_poll = True
+        self._started = False
         self._halt = threading.Event()
         self.confirmed = threading.Event()
         self.error: BaseException | None = None
         self._thread = threading.Thread(target=self._run, name="presence-watch", daemon=True)
 
     def is_set(self) -> bool:
+        if self._after_first_tick and not self._started and not self._halt.is_set():
+            # RobotRuntime polls stop_event once before each control tick.
+            if self._first_runtime_poll:
+                self._first_runtime_poll = False
+                return False
+            self._thread.start()
+            self._started = True
+            logger.info("First presentation control tick completed; starting inspection presence checks")
         return self.confirmed.is_set() or self.error is not None
 
     def _run(self) -> None:
@@ -84,12 +98,15 @@ class PresenceWatch:
             self.error = error
 
     def __enter__(self) -> "PresenceWatch":
-        self._thread.start()
+        if not self._after_first_tick:
+            self._thread.start()
+            self._started = True
         return self
 
     def __exit__(self, *exc: object) -> None:
         self._halt.set()
-        self._thread.join()
+        if self._started:
+            self._thread.join()
 
 
 @contextmanager
@@ -194,7 +211,7 @@ def present_block(export_root: Path, station: Any) -> None:
             "The anomaly model has no empty-ROI reference, so it never reports EMPTY and presentation "
             "cannot be confirmed (collect empty frames, then `brick-ad prepare` + `brick-ad fit-empty`)"
         )
-    with PresenceWatch(lambda: not station.is_empty(), PRESENT_CONFIRM_S) as watch:
+    with PresenceWatch(lambda: not station.is_empty(), PRESENT_CONFIRM_S, after_first_tick=True) as watch:
         run_policy(export_root, PRESENT_TASK, duration_s=PRESENT_DURATION_S, stop_event=watch)
     if watch.error is not None:
         raise RuntimeError("EMPTY check failed during presentation") from watch.error

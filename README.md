@@ -42,7 +42,7 @@ The optional robot dependencies match the runtime revision and SO-101/Studio plu
 
 The script opens the inspection camera and anomaly model (`InspectionStation`, see [anomaly_detection/README.md](anomaly_detection/README.md)) before any motion, then:
 
-1. Runs the single multi-task π0.5 model with the presentation instruction until inspection has been anything other than `EMPTY` continuously for `PRESENT_CONFIRM_S` (3 seconds); the robot then holds the brick in place. The check uses the same `EMPTY` rule as the inspection but skips the anomaly model, so it does not slow the policy. If that does not happen within `PRESENT_DURATION_S`, the cycle aborts
+1. Runs the single multi-task π0.5 model with the presentation instruction. Presence checks start only after the first policy control tick has completed, not during model loading or connection. Presentation ends once inspection has been anything other than `EMPTY` continuously for `PRESENT_CONFIRM_S` (3 seconds); the robot then holds the brick in place. The check uses the same `EMPTY` rule as the inspection but skips the anomaly model, so it does not slow the policy. If that does not happen within `PRESENT_DURATION_S`, the cycle aborts
 2. Inspects the brick with the anomaly model. `DEFECTIVE` and `GOOD` pick the placement; no brick (`EMPTY`) or an uncertain score (`ROTATE`) logs a warning and defaults to the defective dish in the standalone sorting script, even if no brick is present. The GUI and `run_model cycle` still abort on inconclusive results
 3. Closes the inspection camera and runs the same model with the corresponding placement instruction until the SO-101 gripper moves at least 15 normalized points in either direction from its starting position for 0.5 seconds. The configured placement duration is a timeout; if the movement is not detected, the cycle aborts
 
@@ -54,7 +54,7 @@ The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): w
 
 ### Remote inspection demo
 
-From the Mac, [run-inspection-demo.sh](scripts/run-inspection-demo.sh) connects to roberta and runs only the presentation and inspection stages. It uses `~/Downloads/pi05-ricotta-runtime` on roberta by default and saves the report to `~/Downloads/inspection.png`. Set `ROBERTA_HOST` or `EXPORT` to override the host or a directory/zip under roberta's Downloads; pass `--present-timeout` to override the default 45 seconds.
+From the Mac, [run-inspection-demo.sh](scripts/run-inspection-demo.sh) connects to roberta and runs only the presentation and inspection stages. Its presence check also waits for the first policy control tick before starting. It uses `~/Downloads/pi05-ricotta-runtime` on roberta by default and saves the report to `~/Downloads/inspection.png`. Set `ROBERTA_HOST` or `EXPORT` to override the host or a directory/zip under roberta's Downloads; pass `--present-timeout` to override the default 45 seconds.
 
 For the full presentation, inspection, and dish placement cycle, run [run-sorting.sh](scripts/run-sorting.sh) from the Mac. It uses the same host and export defaults and sets the presentation and placement timeouts to 45 seconds. Placement stops early when the gripper movement heuristic passes. `scripts/run-sorting.sh --dry-run` logs random routing without connecting to hardware.
 
@@ -82,7 +82,7 @@ The policy is loaded and the robot and cameras are connected once, at the first 
 
 Runtime errors, early stops, and Ctrl+C abort the cycle rather than advancing to inspection or placement. Hold and cleanup are software requests, not guaranteed physical stopping or an emergency stop. Stop competing Studio sessions before running the standalone script.
 
-Durations and the presentation timeout use the SDK's control-loop timing, not a hard wall-clock watchdog; slow inference can extend real elapsed time. Model loading is also outside the timed run, while the 3-second `EMPTY` check runs on wall-clock time from just before the policy loads. The placement release check is a gripper-motion heuristic and does not verify dish occupancy or placement accuracy. Validate it under supervision and retain a physical emergency stop; unattended operation requires a sensor that verifies the brick in the target dish.
+Durations and the presentation timeout use the SDK's control-loop timing, not a hard wall-clock watchdog; slow inference can extend real elapsed time. Model loading is also outside the timed run, while the 3-second `EMPTY` check runs on wall-clock time starting only after the first policy control tick. The placement release check is a gripper-motion heuristic and does not verify dish occupancy or placement accuracy. Validate it under supervision and retain a physical emergency stop; unattended operation requires a sensor that verifies the brick in the target dish.
 
 ### Tests
 

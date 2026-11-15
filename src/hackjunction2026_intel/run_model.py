@@ -275,7 +275,7 @@ class PolicyRunner:
                 "The anomaly model has no empty-ROI reference, so it never reports EMPTY and presentation "
                 "cannot be confirmed (collect empty frames, then `brick-ad prepare` + `brick-ad fit-empty`)"
             )
-        with PresenceWatch(lambda: not station.is_empty(), PRESENT_CONFIRM_S) as watch:
+        with PresenceWatch(lambda: not station.is_empty(), PRESENT_CONFIRM_S, after_first_tick=True) as watch:
             self.run_stage(PRESENT_TASK, duration_s=PRESENT_DURATION_S, stop_event=watch)
         if watch.error is not None:
             raise RuntimeError("EMPTY check failed during presentation") from watch.error
