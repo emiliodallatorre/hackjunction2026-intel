@@ -6,6 +6,9 @@
   ``Status.draining`` is True and nothing else can be started.
 * ``run_action(text)`` starts ``... action <text>``: one ``run_model.run_task``.
 * ``reset()`` starts ``... reset``: ``run_model.reset_robot`` back to the saved home pose.
+* While nothing is running, a ``preview`` child streams the inspection camera so the live view
+  keeps moving when idle. The camera is an exclusive open, so the preview is always stopped
+  before a runner starts and restarted once it exits.
 * ``stop()`` sends SIGINT, which run_model handles like Ctrl-C (the policy stops and the arm is
   told to hold its measured position); if the runner has not exited after STOP_GRACE_S it is
   terminated, then killed. ``stop(force=True)`` while stopping kills it at once.
@@ -13,6 +16,7 @@
 This is a software stop only. Keep the robot's physical emergency stop within reach.
 """
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -26,6 +30,7 @@ from enum import Enum
 from . import events
 from .history import DEFECTIVE, GOOD, History
 
+PREVIEW_GRACE_S = 3.0  # time for the preview to release the camera
 STOP_GRACE_S = 5.0  # time for the runtime to stop the policy, hold the arm and disconnect
 TERMINATE_GRACE_S = 2.0
 FINISH_SIGNAL = signal.SIGUSR1  # must match runner.FINISH_SIGNAL
@@ -65,6 +70,7 @@ class Status:
     frame: str | None = None  # latest inspection-camera frame, base64 JPEG
     frame_seq: int = 0
     camera_live: bool = False  # the station holds the camera (presentation and inspection)
+    preview_live: bool = False  # the idle preview is streaming the inspection camera
     look: events.Event | None = None  # latest scored view of the current cycle
     decision: events.Event | None = None  # the current cycle's decision, once made
     cycle: int = 0  # cycles started in the current (or last) auto run
@@ -96,6 +102,8 @@ class CycleController:
         self._process: subprocess.Popen | None = None
         self._logs: deque[tuple[int, str, str]] = deque(maxlen=LOG_LINES)
         self._log_seq = 0
+        self._preview: subprocess.Popen | None = None
+        self._preview_fd: int | None = None
 
     @property
     def dry_run(self) -> bool:
@@ -136,7 +144,68 @@ class CycleController:
         home = ["--home", os.fspath(self.home_file)] if self.home_file is not None else []
         self._launch(Kind.RESET, ["reset", *home], "Resetting the arm to its home pose")
 
+    def start_preview(self) -> None:
+        """Stream the inspection camera while idle. No-op if a runner or preview is already up."""
+        with self._lock:
+            if self._process is not None or self._preview is not None:
+                return
+            read_fd, write_fd = os.pipe()
+            try:
+                preview = subprocess.Popen(
+                    [self._python, "-m", "operator_gui.preview", "--events-fd", str(write_fd),
+                     *(["--dry-run"] if self.dry_run else [])],
+                    pass_fds=(write_fd,),
+                )
+            except BaseException:
+                os.close(read_fd)
+                os.close(write_fd)
+                return
+            finally:
+                with contextlib.suppress(OSError):
+                    os.close(write_fd)
+            self._preview = preview
+            self._preview_fd = read_fd
+        threading.Thread(target=self._follow_preview, args=(preview, read_fd),
+                         name="preview-events", daemon=True).start()
+
+    def stop_preview(self) -> None:
+        """Stop the preview and wait for the camera to be released."""
+        with self._lock:
+            preview, self._preview = self._preview, None
+        if preview is None:
+            return
+        preview.terminate()
+        try:
+            preview.wait(PREVIEW_GRACE_S)
+        except subprocess.TimeoutExpired:
+            preview.kill()
+            preview.wait()
+
+    def _follow_preview(self, preview: subprocess.Popen, read_fd: int) -> None:
+        with os.fdopen(read_fd, encoding="utf-8") as pipe:
+            for line in pipe:
+                try:
+                    event = events.decode(line)
+                except ValueError:
+                    continue
+                # Only frames: the preview must never touch stages, verdicts or history.
+                if event.get("type") == events.FRAME:
+                    with self._lock:
+                        if self._process is not None:
+                            continue  # a run started: its frames win
+                        self._status.frame = event["jpeg"]
+                        self._status.frame_seq += 1
+                        self._status.preview_live = True
+        preview.wait()
+        with self._lock:
+            self._status.preview_live = False
+
     def _launch(self, kind: Kind, mode_args: Sequence[str], message: str) -> None:
+        with self._lock:
+            if self._process is not None:
+                raise RuntimeError("Something is already running")
+        # Release the camera before the runner opens it: both holding it would fail the open.
+        self.stop_preview()
         with self._lock:
             if self._process is not None:
                 raise RuntimeError("Something is already running")
@@ -177,6 +246,7 @@ class CycleController:
 
     def shutdown(self) -> None:
         """Stop anything running and wait for the runner to exit (dashboard shutdown)."""
+        self.stop_preview()
         process = self._process
         self.stop()
         if process is not None:
@@ -208,6 +278,8 @@ class CycleController:
             if status.outcome is None:  # killed, or crashed before reporting
                 status.outcome = events.STOPPED if code < 0 else events.ERROR
                 status.message = f"Runner exited unexpectedly (code {code})"
+        # The runner has released the camera: idle streaming can resume.
+        self.start_preview()
 
     def _apply(self, event: events.Event) -> None:
         kind = event["type"]

@@ -41,6 +41,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     controller = CycleController(source_args, History(args.history), action_duration_s=args.action_duration,
                                  home_file=args.home.resolve() if args.home else None)
     register(controller)
+    # Stream the inspection camera while idle; a run takes the camera over and gives it back.
+    app.on_startup(controller.start_preview)
     app.on_shutdown(controller.shutdown)
     ui.run(host=args.host, port=args.port, title="Brick Sorter", dark=True, reload=False, show=False,
            favicon="🧱")

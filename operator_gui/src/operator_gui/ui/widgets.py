@@ -78,13 +78,13 @@ class LiveView:
         if status.frame and status.frame_seq != self._seq:
             self._seq = status.frame_seq
             self.image.set_source(jpeg_url(status.frame))
-        live = status.camera_live and status.phase is not Phase.IDLE
+        live = (status.camera_live and status.phase is not Phase.IDLE) or status.preview_live
         self.badge.set_text("LIVE" if live else "IDLE")
         self.badge.style(replace=theme.pill_style(theme.DANGER if live else theme.MUTED))
         if live:
             note = ""
         elif not status.frame:
-            note = "Dry run: no camera, the verdict is random" if self._dry_run else "Press Auto cycle to start sorting"
+            note = "Dry run: no camera, the verdict is random" if self._dry_run else "Waiting for the camera"
         elif status.phase is not Phase.IDLE:
             note = "Camera released while the arm places the brick"
         else:
