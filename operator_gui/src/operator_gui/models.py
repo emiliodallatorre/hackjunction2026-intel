@@ -79,18 +79,29 @@ def discover(extra: Path | None = None) -> list[Model]:
         seen.add(resolved)
         found.append(Model(resolved, path.name, kind))
 
+    extra_dirs: list[Path] = []
     if extra is not None:
         if extra.is_dir() and _is_export_folder(extra):
             add(extra, "folder")
         elif _is_export_zip(extra):
             add(extra, "zip")
+        elif extra.is_dir():
+            # A directory holding exports (e.g. ~/Downloads): search it first, rather than refuse.
+            logger.info("--export %s is not an export itself; searching inside it", extra)
+            extra_dirs.append(extra)
         else:
-            logger.warning("Ignoring --export %s: no %s/runtime.yaml inside", extra, BACKEND)
+            logger.warning("Ignoring --export %s: no runtime.yaml and exports/%s/ inside", extra, BACKEND)
 
-    for directory in SEARCH_DIRS:
+    scanned: set[Path] = set()
+    for directory in [*extra_dirs, *SEARCH_DIRS]:
         if not directory.is_dir():
             logger.info("Skipping %s: not a directory", directory)
             continue
+        resolved_dir = directory.resolve()
+        if resolved_dir in scanned:
+            logger.info("Skipping %s: already scanned", directory)
+            continue
+        scanned.add(resolved_dir)
         entries = sorted(directory.iterdir())
         logger.info("Scanning %s (%d entries)", directory, len(entries))
         for candidate in entries:
@@ -106,8 +117,9 @@ def discover(extra: Path | None = None) -> list[Model]:
         if SEARCH_DEPTH > 1:
             for sub in sorted(p for p in directory.iterdir() if p.is_dir()):
                 try:
-                    if _is_export_folder(sub):
-                        continue  # already added above
+                    if sub.resolve() in scanned or _is_export_folder(sub):
+                        continue  # already scanned, or already added above
+                    scanned.add(sub.resolve())
                     for candidate in sorted(sub.iterdir()):
                         if candidate.is_dir() and _is_export_folder(candidate):
                             add(candidate, "folder")
