@@ -118,7 +118,8 @@ class PolicyRunner:
         """Read and remember the current pose as the one ``reset`` returns to."""
         with self._connected_robot() as robot:
             self.home_pose = robot.get_observation().joint_positions
-        logger.info("Home pose captured: %s", dict(zip(robot.joint_names, self.home_pose.tolist(), strict=False)))
+            joint_names = list(robot.joint_names)
+        logger.info("Home pose captured: %s", dict(zip(joint_names, self.home_pose.tolist(), strict=False)))
         return self.home_pose
 
     def reset(self, *, pose: Any | None = None) -> None:
