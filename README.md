@@ -1,6 +1,367 @@
-# Brick inspection and sorting
+# Team Sfogliatelle — π cotta
 
-## Sorting demo
+[![Watch the demo](https://img.youtube.com/vi/i87zoaiSM1U/maxresdefault.jpg)](https://youtu.be/i87zoaiSM1U)
+
+*▶️ [Watch the full demo on YouTube](https://youtu.be/i87zoaiSM1U)*
+
+An SO-101 robot arm inspects Lego Duplo bricks and sorts them into two dishes: good bricks go in
+the yellow one, defective bricks in the orange one. The policy that moves the arm, the model that
+spots defects, and the operator dashboard all run locally on one Intel Core Ultra X9 388H laptop —
+no cloud inference anywhere in the loop.
+
+---
+
+## 1. What we do
+
+One sorting cycle is three stages. The same π0.5 model performs all of them; only the text
+instruction given to it changes.
+
+| Stage | Instruction sent to the policy | Ends when |
+|---|---|---|
+| **Present** | `Move any brick to the center` | The inspection camera has seen a brick for 3 s continuously (`PRESENT_CONFIRM_S`) |
+| **Inspect** | — (policy holds still) | PatchCore returns `GOOD`, `ANOMALY`, `EMPTY`, or an uncertain score |
+| **Place** | `Move the brick to the yellow dish` / `…the orange dish` | The gripper closes on the brick and then opens again for 0.5 s |
+
+After placing, the arm interpolates back to the pose it held before the first cycle, so the next
+presentation does not start over the previous dish. Then it loops.
+
+| Clip | What it shows |
+|---|---|
+| [`videos/01-intro.mp4`](videos/01-intro.mp4) | The arm and the inspection camera |
+| [`videos/02-pick.mp4`](videos/02-pick.mp4) | Picking a brick up |
+| [`videos/02-place.mp4`](videos/02-place.mp4) | Placing it in the yellow dish |
+| [`videos/03-orange-tray.mp4`](videos/03-orange-tray.mp4) | The orange dish, where defective bricks go |
+| [`videos/04-full-run.mp4`](videos/04-full-run.mp4) | A full uncut run, with a plush unicorn as a distractor and bricks scattered everywhere |
+| [`videos/06-training.mp4`](videos/06-training.mp4) | Physical AI Studio: cameras, recorded episodes, the training run |
+
+
+![RGB feed beside the anomaly heatmap](videos/05-anomaly-sidebyside.png)
+
+*The inspection camera's RGB view beside PatchCore's heatmap. Drawing on a brick with a marker is
+enough to push its score above the threshold — the model has never seen a marked brick, and it does
+not need to have.*
+
+The three task instructions live at the top of
+[`sorting.py`](src/hackjunction2026_intel/sorting.py) and must match the wording used when
+labelling the demonstration dataset. Changing the dataset means changing those strings.
+
+## 2. Training and datasets
+
+### Datasets: 316 teleoperated episodes
+
+Every episode is a teleoperated demonstration recorded in **Intel Physical AI Studio**, which drives
+the SO-101 over serial, previews and records the cameras, and stores each take with the text
+instruction it demonstrates. Counts are live from the Studio API
+(`GET /api/dataset/{id}/episodes`):
+
+| Dataset | Episodes | Notes |
+|---|---|---|
+| `merged-dataset` | **316** | What the final policy trains on — everything below, merged |
+| `Single block to the center` | 170 | 101 present · 34 yellow · 35 orange |
+| `Main-moves-relabeled` | 146 | 91 present · 31 yellow · 24 orange |
+| `Main moves` | 76 | The original take, before relabelling |
+| `Pija o blocchettoooooo daiiiiiii` | 30 | First session, wording not yet fixed |
+| `Very clean dataset` | 5 | |
+| `Friendly moves` | 3 | `Say hi` — used for a SmolVLA side experiment |
+
+The relabelling matters more than it sounds. The early datasets had the same behaviour split across
+differently worded instructions — "Take the red square brick and put it on the yellow dish" (21
+episodes) versus "Pick up the red square brick and put it into the yellow dish" (8) versus "Take the
+red brick and put it in the yellow dish" (1). A VLA model conditions on that string, so three
+spellings of one task means three tasks with a third of the data each. `merged-dataset` still
+carries a `dish`/`plate` split (47 yellow dish + 18 yellow plate, 47 orange dish + 12 orange plate)
+for the same reason. The three strings in
+[`sorting.py`](src/hackjunction2026_intel/sorting.py) must match the labels exactly, which is why
+they are constants at the top of the file rather than inline strings.
+
+### The policy: π0.5
+
+The policy is a pretrained **π0.5** vision-language-action model fine-tuned on `merged-dataset`. A
+VLA model takes camera frames plus a text instruction and outputs a chunk of joint positions, so one
+network covers all three stages and "pick up the orange brick instead" is a prompt change rather
+than a retrain.
+
+Training settings, identical across every attempt: **5 epochs**, `bf16-mixed` precision,
+`compile_model: true`, image augmentation on, `val_split: 0.1`, SnapFlow distillation for 3 epochs,
+and `export_backends: ["openvino"]` so Studio hands back OpenVINO IR directly. Batch size moved
+8 → 16 → 32 depending on the GPU. π0.5 also needs Hugging Face access to the gated
+`google/paligemma-3b-pt-224` as its vision-language backbone, via `HF_TOKEN` in `infra/.env`.
+
+### Heating the system: Modal B200s and 35 training jobs
+
+Studio can train locally, but π0.5 is a 3B-parameter backbone — the laptop's iGPU is an inference
+device, not a training one. So Studio was pointed at **Modal**, which rents GPUs per second, and we
+burned through **35 training jobs in about 29 hours** across five GPU tiers: A10G, A100-80GB, H100,
+and **B200** — Nvidia's Blackwell data-center part, the fastest thing Modal rents.
+
+Three automation skills in [`.github/skills/`](.github/skills) exist because the Studio UI is a bad
+place to live when jobs fail this often. They drive Studio's REST API at `roberta:7860/api` directly:
+
+| Skill | What it does |
+|---|---|
+| [`studio-inspect-resources`](.github/skills/studio-inspect-resources/SKILL.md) | Lists projects, datasets with per-task episode counts, models, exports, trainers, policies, devices — the episode table above is its output |
+| [`studio-launch-training`](.github/skills/studio-launch-training/SKILL.md) | `POST /api/jobs:train` with a full payload; clones a previous job's settings and changes one field |
+| [`studio-monitor-training`](.github/skills/studio-monitor-training/SKILL.md) | Polls job status, distinguishes stalled from working via Docker and `modal container list`, cancels and cleans up |
+
+Submitting to the B200 has one non-obvious requirement, documented in the launch skill: it is a
+*separate trainer ID* (`22f86c1e-…`) rather than a GPU choice, and `modal_gpu` must be `null`,
+because Studio's GPU enum does not contain `B200` — the trainer pins the hardware itself. Asking
+for `modal_gpu: "B200"` on the generic Modal trainer is rejected.
+
+**What actually happened is worth recording honestly.** Of 35 jobs, 8 completed. The π0.5 runs on
+B200 did not:
+
+| Attempt | GPU | Reached | Outcome |
+|---|---|---|---|
+| π0.5 · Main-moves-relabeled | B200 | 5 % | Cloudflare R2 DNS failure |
+| π0.5 · Main-moves-relabeled | B200 | 5 % | Aborted, application shutdown |
+| π0.5 · Main-moves-relabeled | B200 | **95 %** | `clobber.modal-storage.com` unresolvable — died downloading the finished model |
+| π0.5 · Single block · "Ricotta" | B200 | **95 %** | Canceled after 151 min |
+| π0.5 · merged-dataset | B200 | 10 % | Canceled |
+| π0.5 · merged-dataset (retry) | B200 | 10 % | Canceled |
+
+Two separate runs reached 95 %, trained for over two hours of B200 time, and then lost the model on
+the way home: Studio's "Downloading trained model from Modal" step could not resolve Modal's storage
+host from the robot. The failures were never the GPU and never the training — they were a gated
+Hugging Face repo (401/403 on `paligemma-3b-pt-224`), Modal's **workspace billing spend limit**
+being hit mid-run, and DNS on the robot host. The B200 did finish other policies on the same
+dataset: **SmolVLA in 58 min** and **ACT in 51 min**, both completed and exported.
+
+The run that produces the final policy is **`Pi0.5 - final`** — `merged-dataset`, 316 episodes, batch
+size 16, on an **H100** rather than a B200, after the B200 attempts kept losing their results at the
+download step.
+
+> **Status at the time of writing:** `Pi0.5 - final` is still *running* at 46 %, and no π0.5 job has
+> completed yet — the trained-models list holds SmolVLA and ACT exports only. The π0.5 inference
+> numbers in section 5 are measured against a real exported π0.5 OpenVINO IR on the target hardware;
+> the policy driving the arm in the demo videos is the best available export at record time. Check
+> `GET /api/jobs` for the current state before citing this section.
+
+### The anomaly detector: PatchCore on good bricks only
+
+**PatchCore** (Anomalib 2.7) learns what a *good* brick looks like and flags anything that does not
+fit. It is not a classifier — it never sees a labelled defect during training. It stores patch
+features from good images in a memory bank, and at inference scores a new patch by its distance to
+the nearest stored neighbours. A high distance means "I have never seen this texture here", which
+covers scratches, marker drawings, and wrong colours without ever enumerating them.
+
+The shipped model (`anomaly_detection/models/patchcore-v2/metadata.json`) was trained on:
+
+| Split | Count | Role |
+|---|---|---|
+| `train/good` | 181 | The PatchCore memory bank |
+| `train/empty` | 20 | Median background reference for the "is there a brick at all" check |
+| `test/good` | 45 | Held out — never in the memory bank |
+| `test/anomaly` | 57 | Held out, used only to set the threshold and report stats |
+| `test/empty` | 5 | Held out |
+
+Held-out test results, from Anomalib on the 102 good+anomaly test images:
+
+| Metric | Value |
+|---|---|
+| Image AUROC | **1.000** |
+| Image F1 | **0.991** |
+| Empty-vs-brick separation | empty scores max **0.013**, bricks min **0.198** — a 15× gap, threshold at 0.106 |
+
+AUROC 1.0 means every anomalous image scored higher than every good image, so there exists a
+threshold with zero errors on this test set. That is a small, single-setup test set with locked
+camera controls, not a claim about bricks in general lighting — the ROI crop, focus, exposure, gain
+and white balance are all pinned in [`config.yaml`](anomaly_detection/config.yaml) precisely because
+PatchCore treats a lighting change as an anomaly too.
+
+The empty check is deliberately not the network: each crop is compared to the median of the 20
+empty-ROI frames, which takes under 1 ms, and PatchCore only runs if a brick is actually there.
+
+Training is cheap because PatchCore only extracts features and never backpropagates — a CPU-only
+torch build fits the model in a minute or two. [`modal_train.py`](anomaly_detection/modal_train.py)
+runs the identical `train()` on a Modal T4/L4 when you want it faster.
+
+Studio in action during training: [`videos/06-training.mp4`](videos/06-training.mp4).
+
+## 3. Where the code is, and how it is structured
+
+Three installable Python packages plus a benchmark harness. They are separate because their
+dependencies genuinely conflict: Anomalib 2.7 needs `jsonargparse<4.47` and `physicalai` needs
+`>=4.50`, so [`pyproject.toml`](pyproject.toml) declares them as mutually exclusive
+(`conflicts = [[{extra = "robot"}, {package = "brick-ad"}]]`) and each gets its own environment.
+
+```
+hackjunction2026-intel/
+├── src/hackjunction2026_intel/        ← robot runtime  (uv sync --extra robot)
+│   ├── sorting.py          300 ln   task strings, durations, export validation, the 3-stage cycle
+│   ├── run_model.py        578 ln   PolicyRunner: loads policy + robot once, reuse across stages
+│   ├── persistent_model.py  17 ln   keeps the model loaded across RobotRuntime.run() calls
+│   ├── run_task.py          62 ln   run one arbitrary instruction
+│   └── anomaly_detection/           inference-only side of the detector, shared by both envs
+│       ├── station.py     108 ln   InspectionStation: owns the camera + model lifecycle
+│       ├── inspector.py   129 ln   BrickInspector: crop → presence → PatchCore → verdict
+│       ├── presence.py     55 ln   the sub-millisecond empty-ROI check
+│       ├── decision.py     56 ln   score + threshold + margin → GOOD / DEFECTIVE / ROTATE / EMPTY
+│       └── imaging.py      50 ln   ROI crop and resize
+│
+├── anomaly_detection/                 ← training tools, `brick-ad` CLI  (uv sync --package brick-ad)
+│   ├── config.yaml                  camera source, locked controls, ROI, model + inference settings
+│   ├── modal_train.py       91 ln   same training function, on a Modal GPU
+│   ├── models/patchcore-v2/         the shipped OpenVINO IR + metadata.json (Git LFS)
+│   └── src/brick_ad/
+│       ├── cli.py         140 ln   cameras · stream · roi · lock · collect · prepare · train · …
+│       ├── capture.py     176 ln   interactive frame collection with burst mode
+│       ├── lock.py        160 ln   measures and pins focus/exposure/gain/white-balance
+│       ├── dataset.py      77 ln   ROI crop + resize + train/test split
+│       ├── train.py       122 ln   fit PatchCore, export OpenVINO, calibrate the empty check
+│       └── evaluate.py    145 ln   confusion matrix, AUROC, F1, margins, per-file mistakes
+│
+├── operator_gui/                      ← NiceGUI dashboard  (add-on; delete the folder to remove)
+│   └── src/operator_gui/
+│       ├── controller.py  391 ln   auto-cycle state machine, drives run_model unchanged
+│       ├── ui/widgets.py  487 ln   camera panel, verdict + heatmap, counters, brick history table
+│       ├── telemetry.py   261 ln   per-device latency / throughput / thermals in the UI
+│       ├── runner.py      178 ln   subprocess that owns the policy
+│       └── dryrun.py       74 ln   simulated robot + camera + random verdicts, no hardware
+│
+├── benchmark/                         ← performance only, no accuracy
+│   ├── bench_core.py                PatchCore across CPU / iGPU / NPU
+│   ├── bench_vla.py                 π0.5 and ACT across devices, with real-time verdicts
+│   └── results/                     JSON + CSV + generated plots
+│
+├── .github/skills/                    ← Studio REST API automation (see section 2)
+│   ├── studio-inspect-resources/    list datasets + per-task episode counts, models, trainers
+│   ├── studio-launch-training/      POST /api/jobs:train, incl. the B200 trainer's quirks
+│   └── studio-monitor-training/     poll status, detect stalls, cancel, clean up
+│
+├── infra/docker-compose.yml           the Physical AI Studio container
+└── videos/                            demo clips, shot list, and the presentation deck
+```
+
+The design rule throughout: **the GUI and the benchmarks are add-ons that call the robot code as it
+is.** `operator_gui` builds one `PolicyRunner` and calls `run_model.run_cycle` in a loop; it patches
+nothing. Deleting either folder leaves a working robot.
+
+## 4. Physical AI integration
+
+The robot side is built entirely on **[`physicalai`](https://github.com/openvinotoolkit/physicalai)**,
+Intel's open-source Python library for physical-AI robots — the same library Physical AI Studio
+uses underneath. We pin it by commit in [`pyproject.toml`](pyproject.toml):
+
+```toml
+robot = [
+  "physicalai[capture,transport] @ git+https://github.com/openvinotoolkit/physicalai.git@8381d439",
+  "physicalai-so101-plugin~=0.3.0",     # the SO-101 arm driver
+  "physicalai-studio-plugin~=0.5.0",    # Studio dataset / export integration
+]
+```
+
+Three pieces of its API carry the whole runtime:
+
+```python
+from physicalai.config import Config          # loads Studio's exported runtime.yaml
+from physicalai.runtime import RobotRuntime   # the control loop: cameras → policy → joint commands
+from physicalai.inference import InferenceModel   # the OpenVINO-backed policy wrapper
+```
+
+**`Config`** parses the `runtime.yaml` that Studio generates next to the OpenVINO export.
+[`sorting.py`](src/hackjunction2026_intel/sorting.py) validates it before anything moves — it checks
+that `class_path` really is `physicalai.runtime.RobotRuntime`, that it contains a `PolicySource` with
+an `InferenceModel`, and that `init_args` exists. A malformed export fails at startup rather than
+mid-motion with the arm holding a brick.
+
+**`RobotRuntime`** owns the 30 Hz loop: it opens the cameras and the serial port, builds the
+observation, calls the policy, and writes joint targets. We do not reimplement any of it. What we do
+override is the export's settings in memory: the model is pointed at `exports/openvino/` inside the
+export, `backend` is forced to `openvino`, and the OpenVINO device comes from `OPENVINO_DEVICE` in
+`sorting.py` (default `AUTO`) — whatever device was picked in Studio's export dialog is ignored, and
+`runtime.yaml` on disk is never rewritten.
+
+**`PersistentInferenceModel`** ([17 lines](src/hackjunction2026_intel/persistent_model.py)) is the
+one real patch. `RobotRuntime.run()` closes its `InferenceModel` when it returns, which is correct
+for a single task but means a three-stage cycle would reload π0.5 three times — and π0.5 takes
+**12.5 s to compile cold** and 1.4 s warm. Subclassing `InferenceModel` to ignore `close()` lets us
+load the policy once, connect the robot once, and swap only the instruction between stages. The
+model is freed when the process exits.
+
+The inspection camera is deliberately kept *out* of `runtime.yaml`: only the inspection code may
+open it, because a V4L2 device allows exactly one reader. Likewise, Studio's own camera preview has
+to be closed before `brick-ad` can see the camera at all.
+
+## 5. Intel hardware: what runs where, and why
+
+The whole stack targets one chip — an **Intel Core Ultra X9 388H** (Panther Lake) with a **B390
+iGPU** and an **NPU**. Both models are OpenVINO IR, so the device is one string, and the interesting
+question is which engine each model belongs on. All numbers below are measured, from
+[`benchmark/results/`](benchmark/results).
+
+### π0.5 — the iGPU is the only option
+
+p50 latency per action chunk, from `benchmark/results/vla_*_summary.csv`:
+
+| Device | p50 | p99 | Actions/s | Energy/inference | Real-time at 30 Hz? |
+|---|---|---|---|---|---|
+| **iGPU** (fp16) | **105 ms** | 107 ms | 476 | 4 186 mJ | **yes** — 6.4 % of the budget |
+| CPU (fp32) | 8 104 ms | 8 126 ms | 6.2 | 237 786 mJ | **no** |
+
+A 30 Hz control loop with a 50-action chunk has to produce one chunk every 1.67 s. The iGPU takes
+105 ms, which is 6.4 % of that budget and leaves a control ceiling of 468 Hz. The CPU takes 8.1 s —
+**4.9× over** the budget — so the action queue empties before the next chunk arrives and the arm
+stalls between motions. The highest control rate the CPU can sustain is 6.2 Hz. That is not a
+"the iGPU is nicer" result; it is the difference between the demo existing and not existing. The
+iGPU is also **57× more energy-efficient per inference** (4.2 J vs 238 J), which is what keeps a
+laptop running this for a whole hackathon.
+
+For context, the same harness on a much smaller ACT policy shows how much headroom the silicon has:
+2.7 ms p50 on the iGPU (37 000 actions/s, 68 mJ), 5.7 ms on the NPU, 87 ms on the CPU.
+
+### PatchCore — fast on the iGPU, so we put it on the NPU
+
+p50 latency from `benchmark/results/result_*_summary.csv`:
+
+| Device | p50 | p99 | Energy/inference | Peak temp | Cold compile |
+|---|---|---|---|---|---|
+| CPU (fp32) | 110 ms | 155 ms | 4 383 mJ | 97 °C | 0.7 s |
+| **iGPU** (fp16) | **54 ms** | 72 ms | **1 711 mJ** | 78 °C | 1.5 s |
+| NPU | 182 ms | 185 ms | 2 535 mJ | 87 °C | 17.1 s |
+
+The iGPU wins on every metric — 2× faster than the CPU and 2.6× cheaper in energy. We still run
+PatchCore on the **NPU** ([`config.yaml`](anomaly_detection/config.yaml): `inference.device: NPU`),
+and that is the right call: the iGPU is already saturated by π0.5, and the two models run *at the
+same time* while a brick is being presented. PatchCore runs a handful of times per cycle on a brick
+that is being held still, so 182 ms costs nothing — while taking it off the iGPU protects the 105 ms
+number the control loop actually depends on. Putting it on the CPU instead would also be viable at
+110 ms, but at 4 383 mJ and 97 °C it heats the package that the iGPU shares.
+
+The NPU's one real cost is a **17 s cold compile** versus 1.5 s on the iGPU. That is paid once at
+startup, before any motion, so it is invisible during a run.
+
+### Benchmark harness
+
+```bash
+./benchmark/run_benchmark.sh --all --plot     # PatchCore: cpu + igpu + npu, with graphs
+./benchmark/run_vla_benchmark.sh              # π0.5 / ACT across devices
+```
+
+It reports p50/p95/p99 latency, sequential and peak throughput, cold and warm compile time,
+first-inference time, **package energy per inference via RAPL** (`--sudo`), sustained-throughput
+drop under load, and peak package and GPU temperature — then a real-time verdict against the 30 Hz
+control budget. Device setup for Panther Lake (`render`/`video` groups, `intel-opencl-icd`, and the
+NPU driver `.deb`s that are not in the Ubuntu repos) is documented in
+[`benchmark/README.md`](benchmark/README.md).
+
+## 6. Operator dashboard
+
+[`operator_gui/`](operator_gui/README.md) is a NiceGUI app on port 8080 with the live camera and its
+ROI box, the latest verdict and heatmap, running counts, a thumbnail table of every brick sorted,
+per-device telemetry, an auto-cycle toggle, and a prompt for typing instructions straight to the
+policy. It raises a loud alert the moment a defect is found.
+
+```bash
+uv run --with-editable ./operator_gui operator-gui --dry-run    # no hardware needed
+```
+
+The dry run simulates the robot, the camera, and the model with random verdicts at ~1.5 s per stage,
+which is also how the UI gets developed away from the arm.
+
+---
+
+## 7. Running it
 
 ### Hardware-free dry run
 
