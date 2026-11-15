@@ -1,0 +1,432 @@
+{
+  "environment": {
+    "timestamp": "2026-11-15T05:43:01+0100",
+    "hostname": "pingu",
+    "kernel": "7.2.9-arch1-1",
+    "cpu_model": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "cpu_count": 20,
+    "openvino_version": "2026.4.1-22982-e213a147257-releases/2026/4",
+    "numpy_version": "2.4.6",
+    "python": "3.13.16",
+    "ov_available_devices": [
+      "CPU",
+      "GPU"
+    ],
+    "requested_devices": [
+      "GPU"
+    ],
+    "cpu_governor": "powersave",
+    "energy_perf_pref": "performance",
+    "ac_online": true,
+    "battery_status": "Not charging",
+    "running_as_root": false,
+    "export_dir": "/tmp/actx",
+    "control_fps": 30.0,
+    "iters": 20,
+    "warmup": 5,
+    "sustain_s": 25
+  },
+  "sensors": {
+    "energy_source": "battery",
+    "energy_valid": false,
+    "rapl_readable": [],
+    "rapl_root_only": 4,
+    "primary_temp": "coretemp/Package id 0",
+    "gpu_temp": "acpitz/temp1_input",
+    "temp_count": 22
+  },
+  "devices": {
+    "GPU": {
+      "ir": "act.xml",
+      "role": "",
+      "cold_start": {
+        "cold_cache": {
+          "read_ms": 18.083077000483172,
+          "compile_ms": 1451.312526998663,
+          "first_infer_ms": 45.921043998532696,
+          "total_ms": 1515.316647997679
+        },
+        "warm_cache": {
+          "read_ms": 23.828386998502538,
+          "compile_ms": 169.88165700240643,
+          "first_infer_ms": 37.53598199909902,
+          "total_ms": 231.246026000008
+        },
+        "no_cache": {
+          "read_ms": 19.856242997775553,
+          "compile_ms": 1286.4550829981454,
+          "first_infer_ms": 40.60455399667262,
+          "total_ms": 1346.9158799925935
+        }
+      },
+      "execution_devices": [
+        "GPU.0"
+      ],
+      "inference_precision": "<Type: 'float16'>",
+      "steady_state": {
+        "latency": {
+          "n": 20,
+          "min_ms": 26.55981099815108,
+          "p50_ms": 33.003971500875195,
+          "p90_ms": 36.52405239736254,
+          "p95_ms": 36.71184985032596,
+          "p99_ms": 37.669447570006014,
+          "max_ms": 37.90884699992603,
+          "mean_ms": 31.81305810012418,
+          "stdev_ms": 4.102492938355462,
+          "wall_s": 0.636,
+          "throughput_fps": 31.432533041399186,
+          "chunk": {
+            "chunk_actions": 100,
+            "control_fps": 30.0,
+            "chunk_budget_ms": 3333.3,
+            "actions_per_s_p50": 3029.9,
+            "duty_p50_pct": 0.99,
+            "duty_p99_pct": 1.13,
+            "max_control_fps_p99": 2654.7,
+            "realtime_p99": true
+          }
+        },
+        "sampler": {
+          "elapsed_s": 0.637,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 60.0,
+          "temp_mean_c": 60.0,
+          "temp_max_c": 60.0,
+          "temp_end_c": 60.0,
+          "gpu_temp_sensor": "acpitz/temp1_input",
+          "gpu_temp_mean_c": 69.0,
+          "gpu_temp_max_c": 69.0
+        }
+      },
+      "throughput": {
+        "stats": {
+          "n": 20,
+          "wall_s": 0.444,
+          "throughput_fps": 45.08487844909892,
+          "n_requests": 4
+        },
+        "sampler": {
+          "elapsed_s": 0.444,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 61.0,
+          "temp_mean_c": 61.0,
+          "temp_max_c": 61.0,
+          "temp_end_c": 61.0,
+          "gpu_temp_sensor": "acpitz/temp1_input",
+          "gpu_temp_mean_c": 82.0,
+          "gpu_temp_max_c": 82.0
+        }
+      },
+      "sustained": {
+        "stats": {
+          "wall_s": 25.0,
+          "total_inferences": 910,
+          "buckets": [
+            {
+              "t_s": 10.0,
+              "n": 363,
+              "fps": 36.21226791566355,
+              "p50_ms": 26.92718199978117,
+              "p99_ms": 31.326474003435578,
+              "temp_c": 62.0,
+              "gpu_temp_c": 65.0
+            },
+            {
+              "t_s": 20.0,
+              "n": 365,
+              "fps": 36.47058069972712,
+              "p50_ms": 26.803553002537228,
+              "p99_ms": 31.013335999887204,
+              "temp_c": 65.0,
+              "gpu_temp_c": 67.0
+            }
+          ],
+          "first_fps": 36.21226791566355,
+          "last_fps": 36.47058069972712,
+          "throughput_drop_pct": -0.7133294845414362
+        },
+        "sampler": {
+          "elapsed_s": 25.023,
+          "temp_sensor": "coretemp/Package id 0",
+          "temp_start_c": 61.0,
+          "temp_mean_c": 67.0,
+          "temp_max_c": 83.0,
+          "temp_end_c": 73.0,
+          "gpu_temp_sensor": "acpitz/temp1_input",
+          "gpu_temp_mean_c": 68.7,
+          "gpu_temp_max_c": 83.0
+        }
+      },
+      "end_to_end": {
+        "skipped": true
+      }
+    }
+  },
+  "model": {
+    "policy": "act",
+    "runner": "physicalai.inference.runners.single_pass.SinglePass",
+    "openvino_dir": "/tmp/actx/exports/openvino",
+    "ir_files": [
+      "act.xml"
+    ],
+    "roles": {},
+    "weights_mb": 136.9,
+    "chunk_actions": 100,
+    "preprocessors": [
+      {
+        "type": "to_float_tensor"
+      },
+      {
+        "type": "resize",
+        "image_resolution": [
+          384,
+          384
+        ],
+        "mode": "letterbox"
+      }
+    ],
+    "input_features": [
+      {
+        "ftype": "STATE",
+        "shape": [
+          6
+        ],
+        "name": "state",
+        "dtype": "float32"
+      },
+      {
+        "ftype": "VISUAL",
+        "shape": [
+          3,
+          720,
+          1280
+        ],
+        "name": "images.realsense rgb",
+        "dtype": "float32"
+      },
+      {
+        "ftype": "VISUAL",
+        "shape": [
+          3,
+          600,
+          800
+        ],
+        "name": "images.gripper cam",
+        "dtype": "float32"
+      }
+    ],
+    "output_features": [
+      {
+        "ftype": "ACTION",
+        "shape": [
+          100,
+          6
+        ],
+        "name": "action",
+        "dtype": "float32"
+      }
+    ]
+  },
+  "idle": {
+    "idle_temp_mean_c": 50.5,
+    "sampler": {
+      "elapsed_s": 8.001,
+      "temp_sensor": "coretemp/Package id 0",
+      "temp_start_c": 61.0,
+      "temp_mean_c": 50.5,
+      "temp_max_c": 61.0,
+      "temp_end_c": 45.0,
+      "gpu_temp_sensor": "acpitz/temp1_input",
+      "gpu_temp_mean_c": 50.8,
+      "gpu_temp_max_c": 56.0
+    }
+  },
+  "memory": {
+    "peak_rss_mb": 687.2,
+    "current_rss_mb": 335.0,
+    "weights_mb": 136.9
+  },
+  "summary_rows": [
+    {
+      "device": "GPU",
+      "ir": "act.xml",
+      "role": "",
+      "primary": true,
+      "precision": "<Type: 'float16'>",
+      "execution_devices": "GPU.0",
+      "p50_ms": 33.0,
+      "p95_ms": 36.71,
+      "p99_ms": 37.67,
+      "seq_fps": 31.433,
+      "peak_fps": 45.085,
+      "actions_per_s": 3029.9,
+      "duty_p99_pct": 1.13,
+      "max_control_fps_p99": 2654.7,
+      "realtime_p99": true,
+      "compile_cold_ms": 1451.3,
+      "compile_warm_ms": 169.9,
+      "first_infer_ms": 45.9,
+      "mj_per_inference": null,
+      "sustained_drop_pct": -0.7,
+      "peak_temp_c": 60.0,
+      "peak_gpu_temp_c": 69.0,
+      "e2e_p50_ms": NaN
+    }
+  ],
+  "devices_nested": {
+    "GPU": {
+      "irs": {
+        "act.xml": {
+          "ir": "act.xml",
+          "role": "",
+          "cold_start": {
+            "cold_cache": {
+              "read_ms": 18.083077000483172,
+              "compile_ms": 1451.312526998663,
+              "first_infer_ms": 45.921043998532696,
+              "total_ms": 1515.316647997679
+            },
+            "warm_cache": {
+              "read_ms": 23.828386998502538,
+              "compile_ms": 169.88165700240643,
+              "first_infer_ms": 37.53598199909902,
+              "total_ms": 231.246026000008
+            },
+            "no_cache": {
+              "read_ms": 19.856242997775553,
+              "compile_ms": 1286.4550829981454,
+              "first_infer_ms": 40.60455399667262,
+              "total_ms": 1346.9158799925935
+            }
+          },
+          "execution_devices": [
+            "GPU.0"
+          ],
+          "inference_precision": "<Type: 'float16'>",
+          "steady_state": {
+            "latency": {
+              "n": 20,
+              "min_ms": 26.55981099815108,
+              "p50_ms": 33.003971500875195,
+              "p90_ms": 36.52405239736254,
+              "p95_ms": 36.71184985032596,
+              "p99_ms": 37.669447570006014,
+              "max_ms": 37.90884699992603,
+              "mean_ms": 31.81305810012418,
+              "stdev_ms": 4.102492938355462,
+              "wall_s": 0.636,
+              "throughput_fps": 31.432533041399186,
+              "chunk": {
+                "chunk_actions": 100,
+                "control_fps": 30.0,
+                "chunk_budget_ms": 3333.3,
+                "actions_per_s_p50": 3029.9,
+                "duty_p50_pct": 0.99,
+                "duty_p99_pct": 1.13,
+                "max_control_fps_p99": 2654.7,
+                "realtime_p99": true
+              }
+            },
+            "sampler": {
+              "elapsed_s": 0.637,
+              "temp_sensor": "coretemp/Package id 0",
+              "temp_start_c": 60.0,
+              "temp_mean_c": 60.0,
+              "temp_max_c": 60.0,
+              "temp_end_c": 60.0,
+              "gpu_temp_sensor": "acpitz/temp1_input",
+              "gpu_temp_mean_c": 69.0,
+              "gpu_temp_max_c": 69.0
+            }
+          },
+          "throughput": {
+            "stats": {
+              "n": 20,
+              "wall_s": 0.444,
+              "throughput_fps": 45.08487844909892,
+              "n_requests": 4
+            },
+            "sampler": {
+              "elapsed_s": 0.444,
+              "temp_sensor": "coretemp/Package id 0",
+              "temp_start_c": 61.0,
+              "temp_mean_c": 61.0,
+              "temp_max_c": 61.0,
+              "temp_end_c": 61.0,
+              "gpu_temp_sensor": "acpitz/temp1_input",
+              "gpu_temp_mean_c": 82.0,
+              "gpu_temp_max_c": 82.0
+            }
+          },
+          "sustained": {
+            "stats": {
+              "wall_s": 25.0,
+              "total_inferences": 910,
+              "buckets": [
+                {
+                  "t_s": 10.0,
+                  "n": 363,
+                  "fps": 36.21226791566355,
+                  "p50_ms": 26.92718199978117,
+                  "p99_ms": 31.326474003435578,
+                  "temp_c": 62.0,
+                  "gpu_temp_c": 65.0
+                },
+                {
+                  "t_s": 20.0,
+                  "n": 365,
+                  "fps": 36.47058069972712,
+                  "p50_ms": 26.803553002537228,
+                  "p99_ms": 31.013335999887204,
+                  "temp_c": 65.0,
+                  "gpu_temp_c": 67.0
+                }
+              ],
+              "first_fps": 36.21226791566355,
+              "last_fps": 36.47058069972712,
+              "throughput_drop_pct": -0.7133294845414362
+            },
+            "sampler": {
+              "elapsed_s": 25.023,
+              "temp_sensor": "coretemp/Package id 0",
+              "temp_start_c": 61.0,
+              "temp_mean_c": 67.0,
+              "temp_max_c": 83.0,
+              "temp_end_c": 73.0,
+              "gpu_temp_sensor": "acpitz/temp1_input",
+              "gpu_temp_mean_c": 68.7,
+              "gpu_temp_max_c": 83.0
+            }
+          }
+        }
+      },
+      "primary_ir": "act.xml",
+      "end_to_end": {
+        "skipped": true
+      }
+    }
+  },
+  "sustained_buckets_index": {
+    "GPU": [
+      {
+        "t_s": 10.0,
+        "n": 363,
+        "fps": 36.21226791566355,
+        "p50_ms": 26.92718199978117,
+        "p99_ms": 31.326474003435578,
+        "temp_c": 62.0,
+        "gpu_temp_c": 65.0
+      },
+      {
+        "t_s": 20.0,
+        "n": 365,
+        "fps": 36.47058069972712,
+        "p50_ms": 26.803553002537228,
+        "p99_ms": 31.013335999887204,
+        "temp_c": 65.0,
+        "gpu_temp_c": 67.0
+      }
+    ]
+  }
+}
