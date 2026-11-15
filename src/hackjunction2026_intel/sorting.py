@@ -229,7 +229,7 @@ def run_cycle(export_root: Path | None, *, dry_run: bool = False) -> None:
         if export_root is None:
             raise ValueError("A Studio runtime export is required for robot execution")
         with closing(PolicyRunner(export_root)) as runner:
-            run_model_cycle(runner)
+            run_model_cycle(runner, inconclusive_as_defective=True)
         return
 
     def run_stage(task: str, duration_s: float) -> None:

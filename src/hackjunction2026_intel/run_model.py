@@ -386,8 +386,8 @@ def reset_robot(runner: PolicyRunner, *, home_file: Path | None = DEFAULT_HOME_F
     runner.reset(pose=load_home_pose(home_file))
 
 
-def run_cycle(runner: PolicyRunner) -> bool:
-    """Present, inspect, place, and reset. Returns True if defective."""
+def run_cycle(runner: PolicyRunner, *, inconclusive_as_defective: bool = False) -> bool:
+    """Present, inspect, place, and reset. Returns True when routed to the defective dish."""
     for duration in (PRESENT_DURATION_S, GOOD_DURATION_S, BAD_DURATION_S):
         _validate_duration(duration)
 
@@ -405,6 +405,9 @@ def run_cycle(runner: PolicyRunner) -> bool:
             is_defective = True
         elif decision.verdict is Verdict.GOOD:
             is_defective = False
+        elif inconclusive_as_defective and decision.verdict in (Verdict.EMPTY, Verdict.ROTATE):
+            logger.warning("Inspection inconclusive; defaulting to the defective dish: %s", decision.message)
+            is_defective = True
         else:
             raise RuntimeError(f"Inspection inconclusive; not sorting the brick: {decision.message}")
 

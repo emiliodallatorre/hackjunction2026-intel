@@ -289,7 +289,7 @@ class SortingCycleTests(unittest.TestCase):
                 patch.object(run_model, "run_cycle") as run:
             sorting.main(["--export", str(self.export)])
         create_runner.assert_called_once_with(self.export)
-        run.assert_called_once_with(create_runner.return_value)
+        run.assert_called_once_with(create_runner.return_value, inconclusive_as_defective=True)
 
     def test_zip_export_is_extracted_including_a_wrapping_folder(self) -> None:
         archive = self.root / "export.zip"
@@ -302,7 +302,7 @@ class SortingCycleTests(unittest.TestCase):
         create_runner.assert_called_once()
         export_root = create_runner.call_args.args[0]
         self.assertEqual(export_root.name, "my-model")
-        run.assert_called_once_with(create_runner.return_value)
+        run.assert_called_once_with(create_runner.return_value, inconclusive_as_defective=True)
         self.assertFalse(export_root.exists(), "extracted export should be cleaned up")
 
     def test_missing_export_prevents_any_motion(self) -> None:

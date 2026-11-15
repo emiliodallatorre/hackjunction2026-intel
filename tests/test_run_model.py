@@ -101,13 +101,13 @@ class CycleTests(unittest.TestCase):
         self.assertEqual(events, ["capture home", "present", "place", "reset"])
 
 
-    def _run_cycle(self, runner: Mock, station: Mock) -> bool:
+    def _run_cycle(self, runner: Mock, station: Mock, *, inconclusive_as_defective: bool = False) -> bool:
         inspection = Mock(__enter__=Mock(return_value=station), __exit__=Mock(return_value=None))
         anomaly = ModuleType("hackjunction2026_intel.anomaly_detection")
         anomaly.InspectionStation = Mock(return_value=inspection)
         anomaly.Verdict = Verdict
         with patch.dict(sys.modules, {"hackjunction2026_intel.anomaly_detection": anomaly}):
-            return run_model.run_cycle(runner)
+            return run_model.run_cycle(runner, inconclusive_as_defective=inconclusive_as_defective)
 
     def test_each_outcome_runs_its_placement(self) -> None:
         for verdict, task, duration in (
@@ -133,12 +133,29 @@ class CycleTests(unittest.TestCase):
         runner.run_stage.assert_not_called()
 
     def test_inconclusive_inspection_prevents_placement(self) -> None:
-        runner = Mock(home_pose=[0.0])
-        station = Mock()
-        station.inspect.return_value = SimpleNamespace(verdict=Verdict.EMPTY, message="empty")
-        with self.assertRaisesRegex(RuntimeError, "inconclusive"):
-            self._run_cycle(runner, station)
-        runner.run_stage.assert_not_called()
+        for verdict in (Verdict.EMPTY, Verdict.ROTATE):
+            with self.subTest(verdict=verdict):
+                runner = Mock(home_pose=[0.0])
+                station = Mock()
+                station.inspect.return_value = SimpleNamespace(verdict=verdict, message=verdict.value)
+                with self.assertRaisesRegex(RuntimeError, "inconclusive"):
+                    self._run_cycle(runner, station)
+                runner.run_stage.assert_not_called()
+
+    def test_inconclusive_inspection_can_default_to_defective(self) -> None:
+        for verdict in (Verdict.EMPTY, Verdict.ROTATE):
+            with self.subTest(verdict=verdict):
+                runner = Mock(home_pose=[0.0])
+                station = Mock()
+                station.inspect.return_value = SimpleNamespace(verdict=verdict, message=verdict.value)
+                with self.assertLogs(run_model.logger, level="WARNING") as logs:
+                    self.assertTrue(self._run_cycle(runner, station, inconclusive_as_defective=True))
+                self.assertIn("Inspection inconclusive", logs.output[0])
+                runner.run_stage.assert_called_once_with(
+                    run_model.BAD_TASK, duration_s=run_model.BAD_DURATION_S,
+                    stop_event_factory=run_model.GripperReleaseWatch,
+                )
+                runner.reset.assert_called_once()
 
 
 class RunStageTests(unittest.TestCase):

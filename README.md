@@ -43,7 +43,7 @@ The optional robot dependencies match the runtime revision and SO-101/Studio plu
 The script opens the inspection camera and anomaly model (`InspectionStation`, see [anomaly_detection/README.md](anomaly_detection/README.md)) before any motion, then:
 
 1. Runs the single multi-task π0.5 model with the presentation instruction until inspection has been anything other than `EMPTY` continuously for `PRESENT_CONFIRM_S` (3 seconds); the robot then holds the brick in place. The check uses the same `EMPTY` rule as the inspection but skips the anomaly model, so it does not slow the policy. If that does not happen within `PRESENT_DURATION_S`, the cycle aborts
-2. Inspects the brick with the anomaly model. `DEFECTIVE` and `GOOD` pick the placement; no brick (`EMPTY`) or an uncertain score (`ROTATE`) aborts the cycle, since there is no rotate stage
+2. Inspects the brick with the anomaly model. `DEFECTIVE` and `GOOD` pick the placement; no brick (`EMPTY`) or an uncertain score (`ROTATE`) logs a warning and defaults to the defective dish in the standalone sorting script, even if no brick is present. The GUI and `run_model cycle` still abort on inconclusive results
 3. Closes the inspection camera and runs the same model with the corresponding placement instruction until the SO-101 gripper moves at least 30 normalized points from its starting position for 0.5 seconds. The configured placement duration is a timeout; if release is not detected, the cycle aborts
 
 After release is detected, the arm returns to the pose captured before the first cycle. Repeated cycles reuse that pose, so the next presentation does not start over the previous dish. The gripper movement is a release signal, not visual confirmation that the brick landed in the correct dish.
