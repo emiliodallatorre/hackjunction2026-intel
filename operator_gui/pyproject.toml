@@ -1,0 +1,16 @@
+[project]
+name = "operator-gui"
+version = "0.1.0"
+description = "NiceGUI operator dashboard for the brick sorting cycle"
+readme = "README.md"
+requires-python = ">=3.13"
+# Runs on top of the hackjunction2026-intel environment (robot extra), which provides the sorting
+# cycle; it is deliberately not a dependency here, so this folder stays out of the uv workspace.
+dependencies = ["nicegui>=4.0,<5"]
+
+[project.scripts]
+operator-gui = "operator_gui.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
