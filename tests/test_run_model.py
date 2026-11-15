@@ -167,8 +167,7 @@ class RunStageTests(unittest.TestCase):
 
         runtime = FakeRuntime()
         runner = run_model.PolicyRunner.__new__(run_model.PolicyRunner)
-        runner._source_args = {}
-        runner._config = SimpleNamespace(instantiate=Mock(return_value=runtime))
+        runner._load_config = Mock(return_value=SimpleNamespace(instantiate=Mock(return_value=runtime)))
 
         def make_signal(robot):
             self.assertEqual(events, ["enter"])

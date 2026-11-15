@@ -68,13 +68,22 @@ class PolicyRunner:
     def __init__(self, export_root: Path):
         _validate_export(export_root)
         self.export_root = export_root
+        self._load_config()
+        self.home_pose: Any | None = None
+        logger.info("Studio runtime configuration validated; %s on %s", BACKEND, OPENVINO_DEVICE)
 
+    def _load_config(self, task: str | None = None) -> Any:
+        """Load and validate ``runtime.yaml`` afresh.
+
+        Typed instantiation converts nested mappings into Namespaces in place, so a loaded
+        configuration cannot be instantiated a second time.
+        """
         from physicalai.config import Config
 
-        self._config = Config.load(export_root / "runtime.yaml")
-        if self._config.class_path != "physicalai.runtime.RobotRuntime":
+        config = Config.load(self.export_root / "runtime.yaml")
+        if config.class_path != "physicalai.runtime.RobotRuntime":
             raise ValueError("Expected a Studio-exported RobotRuntime configuration")
-        source = self._config.init_args.get("action_source")
+        source = config.init_args.get("action_source")
         if not isinstance(source, dict) or source.get("class_path") != "physicalai.runtime.PolicySource":
             raise ValueError("Runtime configuration must use PolicySource, not teleoperation")
         source_args = source.get("init_args")
@@ -86,19 +95,17 @@ class PolicyRunner:
         model_args = model.get("init_args")
         if not isinstance(model_args, dict):
             raise ValueError("InferenceModel configuration is missing init_args")
-        self._source_args = source_args
 
         # Resolve weights against the export, not the working directory, and pin OpenVINO.
-        model_args["export_dir"] = str((export_root / "exports" / BACKEND).resolve())
+        model_args["export_dir"] = str((self.export_root / "exports" / BACKEND).resolve())
         model_args["backend"] = BACKEND
         model_args["device"] = OPENVINO_DEVICE
         model_args.pop("policy_name", None)
-        robot = self._config.init_args.get("robot")
-        if not isinstance(robot, dict):
+        if not isinstance(config.init_args.get("robot"), dict):
             raise ValueError("Runtime configuration is missing a robot")
-        self._robot_config = robot
-        self.home_pose: Any | None = None
-        logger.info("Studio runtime configuration validated; %s on %s", BACKEND, OPENVINO_DEVICE)
+        if task is not None:
+            source_args["task"] = task
+        return config
 
     @contextmanager
     def _connected_robot(self) -> Iterator[Any]:
@@ -110,7 +117,7 @@ class PolicyRunner:
         from physicalai.config import instantiate
         from physicalai.robot import connect
 
-        robot = instantiate(self._robot_config)
+        robot = instantiate(self._load_config().init_args["robot"])
         with connect(robot) as connected:
             yield connected
 
@@ -186,8 +193,7 @@ class PolicyRunner:
 
         from physicalai.runtime import RobotRuntime
 
-        self._source_args["task"] = task
-        runtime = self._config.instantiate(expected_type=RobotRuntime)
+        runtime = self._load_config(task).instantiate(expected_type=RobotRuntime)
         if not isinstance(runtime, RobotRuntime):
             raise TypeError("Runtime configuration did not instantiate a RobotRuntime")
 
