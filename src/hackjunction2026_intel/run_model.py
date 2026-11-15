@@ -1,7 +1,8 @@
 """Run the exported policy: one arbitrary task, or the full inspect-and-sort cycle.
 
 Both modes go through one PolicyRunner, which validates the export and the Studio runtime
-configuration once, up front, and then builds a runtime per stage.
+configuration once, up front, then loads the policy and connects the robot and cameras once
+and reuses them for every stage until it is closed.
 
     python -m hackjunction2026_intel.run_model --export ./export task "Move any brick to the center"
     python -m hackjunction2026_intel.run_model --export ./export cycle
@@ -11,7 +12,7 @@ import argparse
 import logging
 import time
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from math import isfinite
 from pathlib import Path
 from typing import Any, Callable
@@ -57,12 +58,12 @@ class PolicyRunner:
     """Holds a validated Studio runtime configuration and runs stages against it.
 
     The export and the configuration are checked once in ``__init__``, so a bad export or a
-    teleoperation configuration fails before any motion. Each ``run_stage`` call still builds a
-    fresh runtime: ``run()`` closes its InferenceModel on exit, so a runtime serves one stage,
-    and the task is written into the configuration before instantiation rather than passed to
-    ``run()``, so changing task requires rebuilding anyway.
+    teleoperation configuration fails before any motion. The first ``run_stage`` builds one
+    runtime, loading the policy and connecting the robot and cameras, and every later stage
+    reuses it, switching only the task; each ``run()`` still starts from a reset model and an
+    empty action queue. ``close()`` disconnects the runtime and frees the model.
 
-    ``home_pose`` is read from the robot at construction and is what ``reset`` returns to.
+    ``home_pose`` is what ``reset`` returns to; ``capture_home_pose`` reads it from the robot.
     """
 
     def __init__(self, export_root: Path):
@@ -70,9 +71,10 @@ class PolicyRunner:
         self.export_root = export_root
         self._load_config()
         self.home_pose: Any | None = None
+        self._runtime: Any | None = None
         logger.info("Studio runtime configuration validated; %s on %s", BACKEND, OPENVINO_DEVICE)
 
-    def _load_config(self, task: str | None = None) -> Any:
+    def _load_config(self, *, persistent_model: bool = False) -> Any:
         """Load and validate ``runtime.yaml`` afresh.
 
         Typed instantiation converts nested mappings into Namespaces in place, so a loaded
@@ -101,19 +103,61 @@ class PolicyRunner:
         model_args["backend"] = BACKEND
         model_args["device"] = OPENVINO_DEVICE
         model_args.pop("policy_name", None)
+        if persistent_model:
+            model["class_path"] = "hackjunction2026_intel.persistent_model.PersistentInferenceModel"
         if not isinstance(config.init_args.get("robot"), dict):
             raise ValueError("Runtime configuration is missing a robot")
-        if task is not None:
-            source_args["task"] = task
         return config
+
+    def _open_runtime(self) -> Any:
+        """Build and connect the shared runtime on first use; later calls return it."""
+        if self._runtime is not None:
+            return self._runtime
+        from physicalai.runtime import RobotRuntime
+
+        runtime = self._load_config(persistent_model=True).instantiate(expected_type=RobotRuntime)
+        if not isinstance(runtime, RobotRuntime):
+            raise TypeError("Runtime configuration did not instantiate a RobotRuntime")
+        try:
+            runtime.connect()
+        except BaseException:
+            self._release_model(runtime)
+            raise
+        self._runtime = runtime
+        logger.info("Policy loaded; robot and cameras connected for the session")
+        return runtime
+
+    @staticmethod
+    def _release_model(runtime: Any) -> None:
+        # PolicySource keeps no public handle on its model.
+        release = getattr(getattr(runtime.action_source, "_model", None), "release", None)
+        if release is not None:
+            release()
+
+    def close(self) -> None:
+        """Hold the arm, disconnect the shared runtime, and free the model. Safe to call twice."""
+        runtime, self._runtime = self._runtime, None
+        if runtime is None:
+            return
+        try:
+            try:
+                runtime.robot.send_action(runtime.robot.get_observation().joint_positions)
+            finally:
+                runtime.disconnect()
+        finally:
+            self._release_model(runtime)
+        logger.info("Robot and cameras disconnected; policy unloaded")
 
     @contextmanager
     def _connected_robot(self) -> Iterator[Any]:
-        """Connect only the robot from the configuration, without loading the policy.
+        """The shared runtime's robot if it is open, else only the robot from the configuration.
 
         InferenceModel loads its weights in its constructor, so instantiating the whole runtime
-        to move a joint would read the model off disk for nothing. Only the robot is built here.
+        just to move a joint would read the model off disk for nothing.
         """
+        if self._runtime is not None:
+            yield self._runtime.robot
+            return
         from physicalai.config import instantiate
         from physicalai.robot import connect
 
@@ -191,11 +235,8 @@ class PolicyRunner:
         if stop_event is not None and stop_event_factory is not None:
             raise ValueError("Pass either stop_event or stop_event_factory, not both")
 
-        from physicalai.runtime import RobotRuntime
-
-        runtime = self._load_config(task).instantiate(expected_type=RobotRuntime)
-        if not isinstance(runtime, RobotRuntime):
-            raise TypeError("Runtime configuration did not instantiate a RobotRuntime")
+        runtime = self._open_runtime()
+        runtime.action_source.set_task(task)
 
         if stop_event is None and stop_event_factory is None:
             logger.warning(
@@ -205,23 +246,22 @@ class PolicyRunner:
             logger.info(
                 "Running task %r until its completion check passes (timeout %s control seconds)", task, duration_s
             )
-        with runtime:
-            try:
-                if stop_event_factory is not None:
-                    stop_event = stop_event_factory(runtime.robot)
-                ticks = runtime.run(duration_s=duration_s, stop_event=stop_event, return_to_initial_state=False)
-                reason = runtime.last_run_reason
-                if reason == "interrupted":
-                    raise KeyboardInterrupt("Policy stage interrupted; aborting")
-                if stop_event is None and (reason != "duration_elapsed" or ticks <= 0):
-                    raise RuntimeError(f"Policy stage did not finish its duration: {reason}")
-                # Zero ticks is fine here: the completion check may already pass before the first tick.
-                if stop_event is not None and reason != "stop_requested":
-                    raise RuntimeError(f"Policy stage {task!r} did not complete within {duration_s} s: {reason}")
-            finally:
-                # Cancel any remaining position target before releasing the driver.
-                measured = runtime.robot.get_observation()
-                runtime.robot.send_action(measured.joint_positions)
+        try:
+            if stop_event_factory is not None:
+                stop_event = stop_event_factory(runtime.robot)
+            ticks = runtime.run(duration_s=duration_s, stop_event=stop_event, return_to_initial_state=False)
+            reason = runtime.last_run_reason
+            if reason == "interrupted":
+                raise KeyboardInterrupt("Policy stage interrupted; aborting")
+            if stop_event is None and (reason != "duration_elapsed" or ticks <= 0):
+                raise RuntimeError(f"Policy stage did not finish its duration: {reason}")
+            # Zero ticks is fine here: the completion check may already pass before the first tick.
+            if stop_event is not None and reason != "stop_requested":
+                raise RuntimeError(f"Policy stage {task!r} did not complete within {duration_s} s: {reason}")
+        finally:
+            # Cancel any remaining position target; the robot stays connected for the next stage.
+            measured = runtime.robot.get_observation()
+            runtime.robot.send_action(measured.joint_positions)
 
     def present(self, station: Any) -> None:
         """Run the presentation task until inspection has not been EMPTY for PRESENT_CONFIRM_S."""
@@ -431,8 +471,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     args = parser.parse_args(argv)
-    with open_export(args.export) as export_root:
-        runner = PolicyRunner(export_root)
+    with open_export(args.export) as export_root, closing(PolicyRunner(export_root)) as runner:
         if args.mode == "reset":
             if args.save_home:
                 save_home_pose(runner, args.home)

@@ -151,14 +151,8 @@ class RunStageTests(unittest.TestCase):
                 get_observation=lambda: SimpleNamespace(joint_positions=[0.0]),
                 send_action=Mock(),
             )
+            action_source = SimpleNamespace(set_task=lambda task: events.append(f"task {task}"))
             last_run_reason = "stop_requested"
-
-            def __enter__(self):
-                events.append("enter")
-                return self
-
-            def __exit__(self, *args):
-                events.append("exit")
 
             def run(self, **kwargs):
                 events.append("run")
@@ -167,23 +161,18 @@ class RunStageTests(unittest.TestCase):
 
         runtime = FakeRuntime()
         runner = run_model.PolicyRunner.__new__(run_model.PolicyRunner)
-        runner._load_config = Mock(return_value=SimpleNamespace(instantiate=Mock(return_value=runtime)))
+        runner._runtime = runtime
 
         def make_signal(robot):
-            self.assertEqual(events, ["enter"])
+            self.assertEqual(events, ["task place"])
             self.assertIs(robot, runtime.robot)
             return signal
 
-        runtime_module = ModuleType("physicalai.runtime")
-        runtime_module.RobotRuntime = FakeRuntime
-        physicalai = ModuleType("physicalai")
-        with patch.dict(sys.modules, {"physicalai": physicalai, "physicalai.runtime": runtime_module}):
-            runner.run_stage("place", duration_s=1, stop_event_factory=make_signal)
+        runner.run_stage("place", duration_s=1, stop_event_factory=make_signal)
 
-        self.assertEqual(events, ["enter", "run", "exit"])
+        self.assertEqual(events, ["task place", "run"])
         self.assertIs(runtime.assert_signal, signal)
         runtime.robot.send_action.assert_called_once_with(runtime.robot.get_observation().joint_positions)
-
 
 if __name__ == "__main__":
     unittest.main()
