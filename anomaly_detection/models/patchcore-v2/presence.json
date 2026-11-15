@@ -1,8 +1,9 @@
 {
-  "threshold": 0.20159912109375,
+  "threshold": 0.10584259033203125,
   "pixel_delta": 25,
+  "normalize": true,
   "n_empty": 20,
   "n_bricks": 181,
-  "empty_max": 1.0,
-  "brick_min": 0.20159912109375
+  "empty_max": 0.0133209228515625,
+  "brick_min": 0.1983642578125
 }
