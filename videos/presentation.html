@@ -30,44 +30,75 @@
     position: absolute; inset: 0;
     display: none;
     flex-direction: column; justify-content: center; align-items: center;
-    padding: 5vh 7vw; gap: 3.5vh;
+    padding: 5vh 4vw; gap: 3vh;
     text-align: center;
   }
   .slide.active { display: flex; animation: slidein 420ms ease-out; }
   @keyframes slidein { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 
-  .tw { font-size: clamp(22px, 3.4vw, 44px); font-weight: 600; line-height: 1.35; max-width: 28ch; min-height: 1.4em; }
+  /* Portrait video sits in the right 62%; captions get the left band, so they
+     never overlap the footage. */
+  .slide.onvideo { justify-content: center; align-items: flex-start; text-align: left; gap: 2.2vh;
+                   padding: 6vh 4vw; }
+  .slide.onvideo > :not(.bg) { max-width: 34vw; }
+  .slide.onvideo > .sub.wide { max-width: 42vw; line-height: 1.55; }
+  /* Data-over-video slides: numbers need the whole screen, so the footage
+     becomes a dimmed backdrop instead of a right-hand band. */
+  .slide.onvideo.dataslide > :not(.bg) { max-width: 92vw; }
+  .slide.onvideo.dataslide .bg video, .slide.onvideo.dataslide .bg img { width: 100%; opacity: .3; }
+  .slide.onvideo.dataslide .tw { font-size: clamp(26px, 3.4vw, 54px); max-width: 26ch; }
+  .slide.onvideo .tw { font-size: clamp(22px, 2.6vw, 42px); max-width: 18ch; }
+  .slide.onvideo.mid { justify-content: center; }
+  .slide.onvideo > :not(.bg) { z-index: 2; }
+
+  /* ---------- background video ---------- */
+  .bg { position: absolute; inset: 0; z-index: 0; background: var(--surface); overflow: hidden; }
+  /* Media is contained, never cropped. Portrait phone clips sit in a 62% band
+     on the right so the caption keeps the left side to itself; landscape
+     captures get .wide and fill the slide. */
+  .bg video, .bg img { position: absolute; top: 0; bottom: 0; right: 0;
+              width: 62%; height: 100%; object-fit: contain; }
+  /* Landscape media (screen captures, stills) is already wide: give it the
+     whole slide and let the scrim darken the left band under the caption. */
+  .bg.wide video, .bg.wide img { width: 100%; }
+  .bg .scrim { position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: linear-gradient(to right, rgba(10,10,14,.85) 0%, rgba(10,10,14,.5) 30%, rgba(10,10,14,0) 44%); }
+  .bg .missing {
+    position: absolute; inset: 0; display: none; flex-direction: column; gap: 10px;
+    align-items: center; justify-content: center; font-family: var(--mono);
+    color: var(--ink-3); font-size: clamp(12px, 1.3vw, 17px);
+    background: repeating-linear-gradient(45deg, transparent 0 22px, #1f1f26 22px 44px);
+  }
+  .bg.no-video .missing { display: flex; }
+  .bg .missing b { color: var(--ink-2); font-weight: 600; }
+  .bg .missing .cam { font-size: 40px; }
+
+  /* ---------- kinetic captions ---------- */
+  .tw { font-size: clamp(26px, 4.2vw, 62px); font-weight: 700; line-height: 1.22;
+        max-width: 24ch; min-height: 1.3em;
+        text-shadow: 0 2px 10px rgba(0,0,0,.75), 0 8px 40px rgba(0,0,0,.6); }
+  .onvideo .tw { transform: rotate(-1.6deg); }
   .tw .caret { display: inline-block; width: 0.55ch; background: var(--accent); margin-left: 2px;
                animation: blink 0.8s steps(1) infinite; height: 1em; vertical-align: -0.12em; }
   @keyframes blink { 50% { opacity: 0; } }
-  .sub { font-family: var(--mono); font-size: clamp(13px, 1.3vw, 18px); color: var(--ink-2); }
+  /* |hot| words become yellow marker highlights over footage */
   em.hot { font-style: normal; color: var(--accent); }
+  .onvideo em.hot { color: #141414; background: var(--accent); padding: 0 0.18em;
+                    border-radius: 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone;
+                    text-shadow: none; display: inline-block; transform: rotate(1.2deg); }
+  em.hot.orange { color: var(--accent-2); }
+  .onvideo em.hot.orange { color: #141414; background: var(--accent-2); }
   em.hot2 { font-style: normal; color: var(--accent-2); }
-
-  /* ---------- video slots ---------- */
-  .vslot {
-    position: relative; width: min(62vw, 110vh);
-    aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
-    background: var(--surface); border: 1px solid #2c2c33;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 1; min-height: 0;
-  }
-  .vslot video { width: 100%; height: 100%; object-fit: cover; }
-  .vslot .missing {
-    position: absolute; inset: 0; display: none; flex-direction: column; gap: 10px;
-    align-items: center; justify-content: center; font-family: var(--mono);
-    color: var(--ink-3); font-size: clamp(12px, 1.2vw, 16px);
-    background:
-      repeating-linear-gradient(45deg, transparent 0 18px, #22222a 18px 36px);
-  }
-  .vslot.no-video .missing { display: flex; }
-  .vslot .missing b { color: var(--ink-2); font-weight: 600; }
-  .vslot .missing .cam { font-size: 34px; }
+  .sub { font-family: var(--mono); font-size: clamp(13px, 1.5vw, 20px); color: var(--ink-2);
+         text-shadow: 0 1px 6px rgba(0,0,0,.9); }
+  .onvideo .sub { transform: rotate(-1.6deg); }
 
   .recbadge {
-    position: absolute; top: 14px; left: 16px; z-index: 3;
-    display: flex; align-items: center; gap: 8px;
-    font-family: var(--mono); font-weight: 600; letter-spacing: 2px;
-    color: var(--rec); font-size: clamp(14px, 1.5vw, 20px);
+    position: absolute; top: 4.5vh; left: 4vw; z-index: 3;
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-weight: 600; letter-spacing: 3px;
+    color: var(--rec); font-size: clamp(16px, 1.8vw, 26px);
+    text-shadow: 0 1px 6px rgba(0,0,0,.8);
   }
   .recbadge::before { content: ""; width: 0.8em; height: 0.8em; border-radius: 50%;
                       background: var(--rec); animation: blink 1s steps(1) infinite; }
@@ -83,49 +114,92 @@
   @keyframes twinkle { 0%,100% { transform: scale(0.6) rotate(0deg); opacity: 0.4; }
                        50%     { transform: scale(1.15) rotate(25deg); opacity: 1; } }
 
-  /* ---------- tray split (slide 5) ---------- */
+  /* ---------- tray split ---------- */
   .trays { display: flex; gap: 2vw; font-size: clamp(18px, 2.2vw, 30px); font-family: var(--mono); }
-  .tray { padding: 1.2em 1.6em; border-radius: 12px; border: 2px solid; font-weight: 600;
+  .tray { padding: 0.9em 1.4em; border-radius: 12px; border: 2px solid; font-weight: 600;
+          background: rgba(10,10,14,.6); backdrop-filter: blur(4px);
           transition: transform 700ms cubic-bezier(.2,1.4,.4,1), opacity 700ms; }
-  .tray.yellow { border-color: var(--accent); color: var(--accent); }
-  .tray.orange { border-color: var(--accent-2); color: var(--accent-2);
+  /* orange is the original tray; yellow is the one that appears mid-slide */
+  .tray.orange { border-color: var(--accent-2); color: var(--accent-2); }
+  .tray.yellow { border-color: var(--accent); color: var(--accent);
                  opacity: 0; transform: translateX(-60%) scale(0.6); }
-  .slide.active .tray.orange { opacity: 1; transform: none; transition-delay: 1.1s; }
+  .slide.active .tray.yellow { opacity: 1; transform: none; transition-delay: 1.1s; }
 
-  /* ---------- ANY brick morph (slide 6) ---------- */
-  .morph { font-size: clamp(26px, 4vw, 56px); font-family: var(--mono); font-weight: 600; }
+  /* ---------- ANY brick morph ---------- */
+  .morph { font-size: clamp(26px, 4vw, 56px); font-family: var(--mono); font-weight: 600;
+           text-shadow: 0 2px 10px rgba(0,0,0,.75); }
   .morph .the { display: inline-block; transition: opacity .5s, transform .5s; }
   .morph .any { display: inline-block; color: var(--accent-2); font-weight: 700;
                 opacity: 0; transform: scale(2.2); transition: opacity .5s 1s, transform .5s 1s; width: 0; overflow: hidden; }
   .slide.active .morph.go .the { opacity: 0; transform: translateY(-20px); position: absolute; }
   .slide.active .morph.go .any { opacity: 1; transform: none; width: auto; }
 
-  .unicorn { font-size: clamp(50px, 7vw, 100px); animation: drop 1.2s cubic-bezier(.3,1.6,.4,1) both; }
+  .unicorn { font-size: clamp(50px, 7vw, 100px); animation: drop 1.2s cubic-bezier(.3,1.6,.4,1) both;
+             filter: drop-shadow(0 6px 18px rgba(0,0,0,.6)); }
   @keyframes drop { from { transform: translateY(-70vh) rotate(-30deg); } to { transform: none; } }
 
   /* ---------- charts ---------- */
-  .chart { width: min(68vw, 900px); text-align: left; font-family: var(--mono); }
-  .chart h3 { font-family: var(--disp); font-size: clamp(16px, 1.6vw, 22px); color: var(--ink);
-              margin-bottom: 4px; font-weight: 600; }
-  .chart .unit { font-size: clamp(11px, 1vw, 14px); color: var(--ink-3); margin-bottom: 14px; }
-  .row { display: grid; grid-template-columns: 5ch 1fr; align-items: center; gap: 12px; margin: 10px 0; }
-  .row .dev { font-size: clamp(13px, 1.2vw, 17px); color: var(--ink-2); text-align: right; }
-  .track { position: relative; height: 26px; border-left: 2px solid #3a3a42; }
+  .chart { width: min(86vw, 1500px); text-align: left; font-family: var(--mono); }
+  .chart h3 { font-family: var(--disp); font-size: clamp(22px, 2.5vw, 40px); color: var(--ink);
+              margin-bottom: 6px; font-weight: 600; }
+  .chart .unit { font-size: clamp(14px, 1.35vw, 20px); color: var(--ink-3); margin-bottom: 22px; }
+  .row { display: grid; grid-template-columns: 7ch 1fr; align-items: center; gap: 18px; margin: 16px 0; }
+  .row .dev { font-size: clamp(17px, 1.7vw, 26px); color: var(--ink-2); text-align: right; }
+  .track { position: relative; height: 40px; border-left: 2px solid #3a3a42; }
   .bar { height: 100%; width: 0; border-radius: 0 4px 4px 0;
          transition: width 1100ms cubic-bezier(.2,.8,.2,1); }
   .slide.active .bar { width: var(--w); }
-  .bar .val { position: absolute; left: calc(var(--w) + 10px); top: 50%; transform: translateY(-50%);
-              color: var(--ink); font-size: clamp(12px, 1.2vw, 16px); white-space: nowrap; }
-  .bar .val small { color: var(--ink-3); }
+  .bar .val { position: absolute; left: calc(var(--w) + 14px); top: 50%; transform: translateY(-50%);
+              color: var(--ink); font-size: clamp(16px, 1.65vw, 26px); white-space: nowrap; font-weight: 600; }
+  .bar .val small { color: var(--ink-3); font-weight: 400; font-size: 0.72em; }
   .cpu { background: var(--cpu); } .gpu { background: var(--gpu); } .npu { background: var(--npu); }
-  .verdict { font-family: var(--mono); font-size: clamp(13px, 1.4vw, 19px); color: var(--accent);
-             border: 1px dashed #3a3a42; border-radius: 10px; padding: 0.7em 1.2em; }
-  .chartpair { display: flex; gap: 4vw; flex-wrap: wrap; justify-content: center; }
-  .chartpair .chart { width: min(42vw, 520px); }
+  .verdict { font-family: var(--mono); font-size: clamp(16px, 1.6vw, 25px); color: var(--accent);
+             border: 1px dashed #3a3a42; border-radius: 10px; padding: 0.8em 1.4em; max-width: 86vw; }
+  .chartpair { display: flex; gap: 3vw; flex-wrap: wrap; justify-content: center; width: 92vw; }
+  .chartpair .chart { width: min(44vw, 700px); flex: 1 1 380px; }
+  /* Black leader: gives the recording a clean head to trim against, and hides
+     the browser's first paint. No text, no HUD, no animation. */
+  .slide.black { background: #000; animation: none; }
+  /* nothing on screen during the leader, progress bar included */
+  body.onblack #progress, body.onblack #hud { display: none; }
+
+  /* ---------- caption hand-off on long slides ---------- */
+  /* A slide that outlives its sentence gets a second caption: the first fades
+     out, the second fades in, so nothing sits frozen on screen. */
+  .tw.swap, .tw.swap2 { transition: opacity 600ms ease, transform 600ms ease; }
+  .sub.swap { transition: opacity 600ms ease, transform 600ms ease; }
+  /* The replacement lines live in one absolutely-placed group so they stack in
+     normal flow with each other, sitting exactly where the originals were. */
+  .swapgroup { position: absolute; left: 4vw; right: 4vw; top: 50%; transform: translateY(-50%);
+               display: flex; flex-direction: column; gap: 2.2vh; align-items: flex-start;
+               text-align: left; opacity: 0; transition: opacity 600ms ease; pointer-events: none; z-index: 2; }
+  .slide.onvideo .swapgroup { max-width: 34vw; }
+  .slide.onvideo.mid .swapgroup { align-items: center; text-align: center; max-width: 60vw;
+                                  left: 0; right: 0; margin: 0 auto; }
+  .slide.swapped .swapgroup { opacity: 1; }
+  .slide.swapped > .tw.swap, .slide.swapped > .sub.swap { opacity: 0; transform: translateY(-14px); }
+  .slide.swapped .tw.swap  { opacity: 0; transform: translateY(-14px); }
+  .slide.swapped .tw.swap2 { opacity: 1; transform: none; }
+
+  /* ---------- dataset stat row ---------- */
+  .stats { display: flex; flex-wrap: wrap; gap: 1.6vw; align-items: stretch; }
+  .stat { display: flex; flex-direction: column; gap: 0.3em; font-family: var(--mono);
+          background: rgba(10,10,14,.62); backdrop-filter: blur(6px);
+          border: 1px solid #2e2e36; border-left: 3px solid var(--ink-3);
+          border-radius: 10px; padding: 0.7em 1em; }
+  .stat b { font-size: clamp(30px, 4vw, 62px); font-weight: 700; line-height: 1;
+            color: var(--ink); font-family: var(--disp); }
+  .stat span { font-size: clamp(12px, 1.15vw, 17px); color: var(--ink-2); line-height: 1.35; }
+  .stat small { color: var(--ink-3); }
+  .stat.good { border-left-color: var(--accent); }
+  .stat.good b { color: var(--accent); }
+  .stat.dim { opacity: .62; }
+  .stat.dim b { color: var(--ink-2); }
   .editme { color: var(--rec); background: #2a1515; padding: 0 0.3em; border-radius: 6px; }
 
-  /* ---------- vibecoded (slide 14) ---------- */
-  .vibe { font-size: clamp(30px, 5vw, 70px); font-weight: 700; font-family: var(--mono); position: relative; }
+  /* ---------- vibecoded ---------- */
+  .vibe { font-size: clamp(30px, 5vw, 70px); font-weight: 700; font-family: var(--mono); position: relative;
+          text-shadow: 0 2px 10px rgba(0,0,0,.8); }
   .vibe .strike { position: relative; display: inline-block; }
   .vibe .strike::after { content: ""; position: absolute; left: 0; top: 55%; height: 4px; width: 0;
                          background: var(--rec); transition: width .5s ease 1.2s; }
@@ -134,37 +208,42 @@
                transition: opacity .6s ease 1.9s; }
   .slide.active .vibe .fix { opacity: 1; }
 
-  .pushscene { font-size: clamp(26px, 4vw, 50px); position: relative; width: 60vw; height: 1.4em; }
+  .pushscene { font-size: clamp(26px, 4vw, 50px); position: relative; width: 50vw; height: 1.4em;
+               filter: drop-shadow(0 4px 12px rgba(0,0,0,.6)); }
   .pushscene .claude { position: absolute; left: 44%; transition: transform 1.4s ease-in 2.6s, opacity 1.4s ease-in 2.6s; }
   .pushscene .robot  { position: absolute; left: 20%; transition: transform 1.2s ease-in-out 2.4s; }
-  .slide.active .pushscene .robot  { transform: translateX(16vw); }
-  .slide.active .pushscene .claude { transform: translateX(45vw) rotate(50deg); opacity: 0; }
+  .slide.active .pushscene .robot  { transform: translateX(14vw); }
+  .slide.active .pushscene .claude { transform: translateX(40vw) rotate(50deg); opacity: 0; }
 
   /* ---------- HUD ---------- */
   #hud { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
          font-family: var(--mono); font-size: 12px; color: var(--ink-3); z-index: 10;
          display: flex; gap: 18px; user-select: none; }
   #hud b { color: var(--ink-2); font-weight: 600; }
+  body.clean #hud, body.clean #progress { display: none; }
   #progress { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2));
               width: 0; z-index: 10; transition: width .3s; }
-  .pill { border: 1px solid #2c2c33; border-radius: 99px; padding: 2px 10px; }
+  .pill { border: 1px solid #2c2c33; border-radius: 99px; padding: 2px 10px; background: rgba(10,10,14,.6); }
   .pill.on { color: var(--accent); border-color: var(--accent); }
 </style>
 </head>
 <body>
 <div id="progress"></div>
 
-<!-- 1 · intro -->
-<section class="slide" data-dur="5" data-say="Hi! I'm pi zero point five. I'm the model trained to run on this robot, by the team...">
-  <p class="tw" data-type="Hi, I'm π-0.5 — the model trained to run on this robot, by the team…"></p>
-  <div class="vslot" data-src="01-intro.mp4">
-    <video muted loop playsinline></video>
-    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/01-intro.mp4</b></span><span>(robot + camera hero shot)</span></div>
+<!-- 0 · black leader : a clean head on the recording to cut against -->
+<section class="slide black" data-dur="1.5"></section>
+
+<!-- 1 · intro : fullscreen robot footage, caption rises from the bottom -->
+<section class="slide onvideo" data-dur="6.8" data-say="Hi! I'm pi zero point five. I'm the model trained to run on this robot, by the team...">
+  <div class="bg" data-src="web/01-intro.mp4">
+    <video muted loop playsinline></video><div class="scrim"></div>
+    <div class="missing"><span class="cam">🎥</span><span>record <b>videos/01-intro.mp4</b>, then run <b>./prepare.sh</b></span><span>(robot + camera hero shot — fullscreen background)</span></div>
   </div>
+  <p class="tw" data-type="Hi, I'm |π-0.5| — the model trained to run on this robot, by the team…"></p>
 </section>
 
 <!-- 2 · team name -->
-<section class="slide" data-dur="3.5" data-say="Sfogliatelle!">
+<section class="slide" data-dur="2" data-say="Sfogliatelle!">
   <h1 class="bigtitle">SFOGLIATELLE
     <span class="star" style="top:-0.4em; left:-0.5em;">✦</span>
     <span class="star" style="top:-0.2em; right:-0.7em; animation-delay:.4s;">✧</span>
@@ -174,129 +253,187 @@
 </section>
 
 <!-- 3 · mission -->
-<section class="slide" data-dur="4.5" data-say="...to detect anomalies in my trail of lego bricks. Which has to be. PERFECT.">
-  <p class="tw" data-type="…to detect anomalies in my trail of LEGO bricks, which has to be |PERFECT.|"></p>
+<section class="slide" data-dur="6.2" data-say="...to detect anomalies in my trail of lego bricks. Which has to be. PERFECT.">
+  <p class="tw" style="max-width:28ch" data-type="…to detect anomalies in my trail of LEGO bricks, which has to be |PERFECT.|"></p>
 </section>
 
-<!-- 4 · two things -->
-<section class="slide" data-dur="6" data-say="I'm really simple. I can only do two things. Pick the brick. And put the brick in the yellow tray.">
-  <p class="tw" data-type="I'm really simple. I can only do two things:"></p>
-  <p class="sub">pick the brick · put the brick in the <em class="hot">yellow</em> tray</p>
-  <div class="vslot" data-src="02-pick-place.mp4">
-    <video muted loop playsinline></video>
-    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/02-pick-place.mp4</b></span><span>(pick brick → yellow tray)</span></div>
+<!-- 4 · two things : footage behind, lower-third caption -->
+<section class="slide onvideo" data-dur="5.5" data-say="I'm really simple. I can only do two things. Pick the brick...">
+  <div class="bg" data-src="web/02-pick.mp4">
+    <video muted loop playsinline></video><div class="scrim"></div>
+    <div class="missing"><span class="cam">🎥</span><span><b>videos/02-pick.mp4</b> — run <b>./prepare.sh</b></span></div>
   </div>
+  <p class="tw" data-type="I'm really simple. I can only do |two things:|"></p>
+  <p class="sub">1 · pick the brick</p>
 </section>
 
-<!-- 5 · maybe three -->
-<section class="slide" data-dur="5" data-say="...ok. Maybe three.">
-  <p class="tw" data-type="…ok, maybe three."></p>
+<!-- 4b · ...and place it -->
+<section class="slide onvideo" data-dur="4.0" data-say="...and put the brick in the orange tray.">
+  <div class="bg" data-src="web/02-place.mp4">
+    <video muted loop playsinline></video><div class="scrim"></div>
+    <div class="missing"><span class="cam">🎥</span><span><b>videos/02-place.mp4</b> — run <b>./prepare.sh</b></span></div>
+  </div>
+  <p class="tw" data-hot="orange" data-type="…put the brick in the |orange tray.|"></p>
+  <p class="sub">2 · that's the whole job</p>
+</section>
+
+<!-- 5 · maybe three : footage behind, trays centered on top -->
+<section class="slide onvideo mid" data-dur="2.2" data-say="...ok. Maybe three.">
+  <div class="bg" data-src="web/03-orange-tray.mp4">
+    <video muted loop playsinline></video><div class="scrim"></div>
+    <div class="missing"><span class="cam">🎥</span><span>record <b>videos/03-orange-tray.mp4</b></span><span>(the yellow tray appears)</span></div>
+  </div>
+  <p class="tw" data-type="…ok, maybe |three.|"></p>
   <div class="trays">
-    <div class="tray yellow">yellow tray</div>
     <div class="tray orange">orange tray</div>
-  </div>
-  <div class="vslot" data-src="03-orange-tray.mp4">
-    <video muted loop playsinline></video>
-    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/03-orange-tray.mp4</b></span><span>(the orange tray appears)</span></div>
+    <div class="tray yellow">yellow tray</div>
   </div>
 </section>
 
 <!-- 6 · or four -->
-<section class="slide" data-dur="4" data-say="...or four.">
+<section class="slide" data-dur="3" data-say="...or four.">
   <p class="tw" data-type="…or four."></p>
   <p class="morph" id="morph">pick <span class="the">the</span><span class="any">ANY</span> brick</p>
 </section>
 
-<!-- 7 · or more / full run -->
-<section class="slide" data-dur="11" data-say="...or more. Here's the whole process, end to finish. No editing. I promise.">
-  <p class="tw" data-type="…or more."></p>
-  <div class="unicorn">🦄</div>
-  <div class="vslot" data-src="04-full-run.mp4">
-    <div class="recbadge">REC</div>
-    <video muted loop playsinline></video>
-    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/04-full-run.mp4</b></span><span>(full run, unicorn distractor, bricks everywhere — one take)</span></div>
+<!-- 7 · or more / full run : one-take footage, REC in the corner, huge center text -->
+<section class="slide onvideo" data-dur="5.8" data-say="...or more. Here's the whole process, end to finish. No editing. I promise.">
+  <div class="bg" data-src="web/04-full-run.mp4">
+    <video muted loop playsinline></video><div class="scrim"></div>
+    <div class="missing"><span class="cam">🎥</span><span>record <b>videos/04-full-run.mp4</b></span><span>(full run, unicorn distractor, bricks everywhere — one take)</span></div>
+  </div>
+  <div class="recbadge">REC</div>
+  <p class="tw" data-type="…or |more.|"></p>
+  <p class="sub">one take · no editing · bricks, trays, and one unicorn</p>
+</section>
+
+<!-- 8 · anomaly detection : side-by-side footage behind, caption low -->
+<section class="slide onvideo" data-dur="11" data-say="I do anomaly detection with Anomalib: PatchCore, trained on a handful of our own bricks. It scores each brick against healthy, and flags what does not match.">
+  <div class="bg still" data-src="web/05-anomaly-sidebyside.png">
+    <img alt="Brick Sorter dashboard: live inspection camera, DEFECTIVE verdict at score 0.80, PatchCore heatmap">
+    <div class="scrim"></div>
+    <div class="missing"><span class="cam">📷</span><span><b>videos/05-anomaly-sidebyside.png</b> missing</span></div>
+  </div>
+  <p class="tw swap" data-hot="orange" data-type="anomaly detection with |Anomalib| — PatchCore, trained on a few good bricks."></p>
+  <p class="sub swap">trained on a handful of healthy bricks — no defect examples needed</p>
+  <div class="swapgroup">
+    <p class="tw swap2" data-hot="orange" data-type="score |0.80| vs threshold 0.50 → |defective.|"></p>
+    <p class="sub">the heatmap shows <em>where</em> it looks wrong</p>
   </div>
 </section>
 
-<!-- 8 · anomaly detection -->
-<section class="slide" data-dur="15" data-say="I autonomously do anomaly detection using Anomalib: a PatchCore model trained on just a few samples of our own bricks. It tells healthy bricks... from defective ones.">
-  <p class="tw" data-type="I do anomaly detection with |Anomalib| — PatchCore on wide_resnet50_2, trained on just a few good samples."></p>
-  <p class="sub">healthy brick ✅ &nbsp;vs&nbsp; defective brick <em class="hot2">(angry face incoming)</em> 😠</p>
-  <div class="vslot" data-src="05-anomaly-sidebyside.mp4">
-    <video muted loop playsinline></video>
-    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/05-anomaly-sidebyside.mp4</b></span><span>(RGB feed ⬌ heatmap, person draws angry face on brick)</span></div>
+<!-- 9 · training (male voice) : Physical AI Studio capture behind -->
+<section class="slide onvideo dataslide" data-dur="17.5" data-voice="male" data-say="We trained with Physical A I Studio. Three hundred and twenty six episodes: the first hundred and fifty six taught us how not to build a dataset, the last hundred and seventy are the good one. Two hours recording, four hours training, on GPUs lent by Modal.">
+  <div class="bg" data-src="web/06-training.mp4">
+    <video muted loop playsinline></video><div class="scrim"></div>
+    <div class="missing"><span class="cam">🎥</span><span>record <b>videos/06-training.mp4</b></span><span>(Physical AI Studio screen capture)</span></div>
   </div>
-</section>
-
-<!-- 9 · training (male voice) -->
-<section class="slide" data-dur="13" data-voice="male" data-say="Training was done with Physical A I Studio, Intel's tool to visualize robots, handle cameras, and train tasks end to end. We recorded 156 episodes, used to finetune a pretrained pi zero point five — on some conveniently lent top-tier hardware, thanks to Modal.">
-  <p class="tw" data-type="Trained with |Physical AI Studio| — 156 recorded episodes, finetuning a pretrained π-0.5."></p>
-  <p class="sub">cameras + robot + task training, end to end · GPUs conveniently lent via <em class="hot">Modal</em></p>
-  <div class="vslot" data-src="06-training.mp4">
-    <video muted loop playsinline></video>
-    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/06-training.mp4</b></span><span>(Physical AI Studio screen capture)</span></div>
+  <p class="tw" data-type="|Physical AI Studio| — finetuning a pretrained π-0.5."></p>
+  <div class="stats">
+    <div class="stat"><b>326</b><span>episodes recorded</span></div>
+    <div class="stat good"><b>170</b><span>the good dataset<br>we trained on</span></div>
+    <div class="stat dim"><b>156</b><span>first attempt —<br>how <em>not</em> to do it</span></div>
+    <div class="stat"><b>~2 h</b><span>recording<br><small>~20 s per take</small></span></div>
+    <div class="stat"><b>~4 h</b><span>training<br><small>GPUs lent via Modal</small></span></div>
   </div>
 </section>
 
 <!-- 10 · the hardware -->
-<section class="slide" data-dur="8" data-say="And all of this runs in real time, on the new Intel Core Ultra X9 388H. An integrated GPU, and an NPU, on one chip.">
-  <p class="tw" data-type="All of this runs in |real time| on the Intel Core Ultra X9 388H."></p>
+<section class="slide" data-dur="6.5" data-say="All of this runs in real time on one Intel Core Ultra X9 chip: integrated GPU, and N P U.">
+  <p class="tw" style="max-width:28ch" data-type="All of this runs in |real time| on the Intel Core Ultra X9 388H."></p>
   <p class="sub">iGPU (Arc, 96 EU) + NPU (AI Boost) + 16-core CPU — one laptop chip, measured by us, on the robot</p>
 </section>
 
-<!-- 11 · pi05 benchmark -->
-<section class="slide" data-dur="13" data-say="Running the V L A on the integrated GPU was a no brainer. 105 milliseconds per inference, against 8 seconds on CPU. 77 times faster. With 50 action chunks, that's 476 actions per second — using just 6 percent of the real-time budget at 30 hertz.">
-  <div class="chart">
-    <h3>π-0.5 inference — where to run a 6.3 GB VLA?</h3>
-    <div class="unit">latency p50, ms — lower is better (measured, OpenVINO 2026.4, batch 1)</div>
-    <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:1.4%"><span class="val">105 ms <small>· 39.8 W · max 70 °C</small></span></div></div></div>
-    <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:70%"><span class="val">8 104 ms <small>· 77× slower</small></span></div></div></div>
-    <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:0%"><span class="val"><small>not measured — 6.3 GB of weights is no NPU-shaped workload</small></span></div></div></div>
+<!-- 11 · VLA benchmark : both models, pi0.5 and ACT -->
+<section class="slide" data-dur="15.5" data-say="Both policies, measured. Pi zero point five on the iGPU: a hundred and five milliseconds, against eight seconds on CPU. A C T fits the N P U: under six milliseconds. Both leave the thirty hertz budget almost untouched.">
+  <div class="chartpair">
+    <div class="chart">
+      <h3>π-0.5 <small style="color:var(--ink-3);font-weight:400">· 6.3 GB</small></h3>
+      <div class="unit">latency p50, ms — lower is better</div>
+      <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:1.3%"><span class="val">105 ms <small>· 39.8 W · 4.19 J · 70 °C</small></span></div></div></div>
+      <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:72%"><span class="val">8 104 ms <small>· 77× slower · 238 J · 98 °C</small></span></div></div></div>
+      <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:0%"><span class="val"><small>won't fit — 6.3 GB is no NPU workload</small></span></div></div></div>
+    </div>
+    <div class="chart">
+      <h3>ACT <small style="color:var(--ink-3);font-weight:400">· small enough for the NPU</small></h3>
+      <div class="unit">latency p50, ms — lower is better</div>
+      <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:3.1%"><span class="val">2.7 ms <small>· 25.4 W · 68 mJ</small></span></div></div></div>
+      <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:6.5%"><span class="val">5.7 ms <small>· 27.6 W · 157 mJ · 73 °C</small></span></div></div></div>
+      <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:72%"><span class="val">86.9 ms <small>· 2.67 J · 39× the energy</small></span></div></div></div>
+    </div>
   </div>
-  <p class="verdict">50-action chunks → 476 actions/s · 6.3 % of the 30 Hz control budget · p99/p50 jitter 1.02×</p>
+  <p class="verdict">π-0.5 · 50-action chunks → 476 actions/s · 6.4 % of the 30 Hz budget &nbsp;·&nbsp; ACT · 0.09 % duty — both real-time, with room to spare</p>
 </section>
 
 <!-- 12 · patchcore benchmark -->
-<section class="slide" data-dur="14" data-say="Anomaly detection runs on the NPU. Sure, the iGPU is faster — but the iGPU is busy driving me. The NPU checks over 5 bricks per second, needs 42 percent less energy than the CPU, and leaves the GPU alone.">
+<section class="slide" data-dur="10" data-say="Anomalib runs on the N P U. The iGPU is faster, but it is busy driving me. Five bricks a second, and the GPU stays free.">
   <div class="chartpair">
     <div class="chart">
-      <h3>PatchCore latency</h3>
+      <h3>Anomalib PatchCore — latency</h3>
       <div class="unit">p50, ms — lower is better</div>
       <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:21%"><span class="val">54 ms <small>(busy with π-0.5!)</small></span></div></div></div>
       <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:43%"><span class="val">110 ms</span></div></div></div>
       <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:72%"><span class="val">182 ms</span></div></div></div>
     </div>
     <div class="chart">
-      <h3>PatchCore energy</h3>
+      <h3>Anomalib PatchCore — energy</h3>
       <div class="unit">mJ per inference — lower is better</div>
-      <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:28%"><span class="val">1 711</span></div></div></div>
-      <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:72%"><span class="val">4 383</span></div></div></div>
-      <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:42%"><span class="val">2 535 <small>· −42 % vs CPU</small></span></div></div></div>
+      <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:28%"><span class="val">1 711 <small>· 31.5 W</small></span></div></div></div>
+      <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:72%"><span class="val">4 383 <small>· 39.9 W · 97 °C</small></span></div></div></div>
+      <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:42%"><span class="val">2 535 <small>· 13.9 W · −42 % energy</small></span></div></div></div>
     </div>
   </div>
-  <p class="verdict">NPU: 5.5 checks/s, zero contention with the VLA on the iGPU — the whole pipeline on one chip</p>
+  <p class="verdict">Anomalib on the NPU: 5.5 checks/s, zero contention with the VLA on the iGPU — the whole pipeline on one chip</p>
 </section>
 
-<!-- 13 · compile speedup -->
-<section class="slide" data-dur="9" data-say="That's it? No! We further compiled the model to fit the new Intel platform, going beyond the standard OpenVINO export from Physical A I Studio.">
-  <p class="tw" data-type="That's it? |No!| We further compiled the model for the new Intel platform…"></p>
-  <p class="verdict">…achieving a <span class="editme">&nbsp;N×&nbsp;</span> speedup over the stock Physical AI Studio OpenVINO export
-    <br><small style="color:var(--ink-3)">⚠ fill in the measured number before recording — placeholder on purpose</small></p>
+<!-- 12b · energy + thermals : the efficiency argument -->
+<section class="slide" data-dur="13" data-say="And not just speed. The N P U draws fourteen watts against forty on the CPU, and peaks twenty four degrees cooler: the difference between running all day and throttling.">
+  <div class="chartpair">
+    <div class="chart">
+      <h3>Power draw while inferring</h3>
+      <div class="unit">watts, Anomalib PatchCore — lower is better</div>
+      <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:35%"><span class="val">13.9 W <small>· −65 % vs CPU</small></span></div></div></div>
+      <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:79%"><span class="val">31.5 W</span></div></div></div>
+      <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:100%"><span class="val">39.9 W</span></div></div></div>
+    </div>
+    <div class="chart">
+      <h3>Peak package temperature</h3>
+      <div class="unit">°C under sustained load — lower is better</div>
+      <div class="row"><span class="dev">NPU</span><div class="track"><div class="bar npu" style="--w:87%"><span class="val">87 °C</span></div></div></div>
+      <div class="row"><span class="dev">iGPU</span><div class="track"><div class="bar gpu" style="--w:78%"><span class="val">78 °C <small>· coolest</small></span></div></div></div>
+      <div class="row"><span class="dev">CPU</span><div class="track"><div class="bar cpu" style="--w:97%"><span class="val">97 °C <small>· throttling territory</small></span></div></div></div>
+    </div>
+  </div>
+  <p class="verdict">π-0.5 on the iGPU: 4.19 J per inference at 39.8 W, peak 70 °C · idle draw 0.93 W — measured with RAPL on the robot</p>
 </section>
 
-<!-- 14 · dashboard -->
-<section class="slide" data-dur="14" data-say="On top of that we... vibecoded... I mean, meticulously prompted... BUILT! A pretty dashboard, to display status, results, and promptly alert the user when there's an anomaly." data-alarm="1">
+<!-- 13 · compile cache : real measured startup win -->
+<section class="slide" data-dur="9.5" data-say="One more thing. Compiling six gigabytes takes twelve seconds. We cache it: every run after the first is ready in one point four.">
+  <div class="chart">
+    <h3>Model load time — OpenVINO compiled-model cache</h3>
+    <div class="unit">π-0.5 on the iGPU, seconds from cold process to first action — lower is better</div>
+    <div class="row"><span class="dev">first run</span><div class="track"><div class="bar cpu" style="--w:84%"><span class="val">12.5 s <small>· compiling 6.3 GB of weights</small></span></div></div></div>
+    <div class="row"><span class="dev">cached</span><div class="track"><div class="bar gpu" style="--w:9.4%"><span class="val">1.4 s <small>· 8.9× faster to ready</small></span></div></div></div>
+  </div>
+  <p class="verdict">The robot reboots between demos — so this is the number you feel, not a benchmark artefact</p>
+</section>
+
+<!-- 14 · dashboard : prompt+dashboard footage behind, gag text on top -->
+<section class="slide onvideo mid" data-dur="9" data-say="On top of that we... vibecoded... I mean, meticulously prompted... BUILT! A pretty dashboard, to display status, results, and promptly alert the user when there's an anomaly." data-alarm="1">
+  <div class="bg" data-src="web/07-dashboard.mp4">
+    <video muted loop playsinline></video><div class="scrim"></div>
+    <div class="missing"><span class="cam">🎥</span><span><b>videos/07-dashboard.mp4</b> — run <b>./prepare.sh</b></span></div>
+  </div>
   <p class="vibe">we <span class="strike">vibecoded</span><span class="fix">*meticulously prompted</span></p>
-  <p class="tw" data-type="…BUILT a dashboard: status, results, and a |comically loud| anomaly alert."></p>
-  <div class="vslot" data-src="07-dashboard.mp4">
-    <video muted loop playsinline></video>
-    <div class="missing"><span class="cam">🎥</span><span>record &amp; drop <b>videos/07-dashboard.mp4</b></span><span>(long Claude prompt + dashboard + loud alert)</span></div>
+  <p class="tw swap" data-type="…|BUILT| a dashboard: live camera, verdict, counts."></p>
+  <div class="swapgroup">
+    <p class="tw swap2" data-type="…and a |comically loud| anomaly alert."></p>
   </div>
   <div class="pushscene"><span class="robot">🦾</span><span class="claude">✳️</span></div>
 </section>
 
 <!-- 15 · outro -->
-<section class="slide" data-dur="6" data-say="Pi zero point five. Anomalib. One Intel chip. Team Sfogliatelle. Thank you!">
+<section class="slide" data-dur="5.5" data-say="Pi zero point five. Anomalib. One Intel chip. Team Sfogliatelle. Thank you!">
   <h1 class="bigtitle" style="font-size:clamp(34px,6vw,84px);">π-0.5 + Anomalib<br>on one chip</h1>
   <p class="sub">team <em class="hot">Sfogliatelle</em> · HackJunction 2026 · Intel Core Ultra X9 388H</p>
 </section>
@@ -306,12 +443,13 @@
   <span class="pill" id="pill-audio"><b>A</b> audio: off</span>
   <span class="pill" id="pill-auto"><b>P</b> autoplay: off</span>
   <span class="pill"><b>F</b> fullscreen</span>
+  <span class="pill"><b>H</b> hide HUD</span>
   <span id="count"></span>
 </div>
 
 <script>
 const slides = [...document.querySelectorAll('.slide')];
-let cur = -1, audioOn = false, autoOn = false, autoTimer = null, typeTimer = null;
+let cur = -1, audioOn = false, autoOn = false, autoTimer = null, typeTimer = null, swapTimer = null;
 const synth = window.speechSynthesis;
 let voices = [], voiceRobot = null, voiceMale = null;
 
@@ -324,7 +462,7 @@ function pickVoices() {
 pickVoices();
 synth.onvoiceschanged = pickVoices;
 
-/* -- typewriter: |hot| spans get the accent color -- */
+/* -- typewriter: |hot| spans get the marker-highlight style -- */
 function typewrite(el, done) {
   const spec = el.dataset.type;
   el.innerHTML = '';
@@ -338,7 +476,9 @@ function typewrite(el, done) {
     const ch = spec[i++];
     if (ch === '|') {
       hot = !hot;
-      if (hot) { const em = document.createElement('em'); em.className = 'hot'; el.insertBefore(em, caret); node = document.createTextNode(''); em.appendChild(node); }
+      if (hot) { const em = document.createElement('em');
+                 em.className = el.dataset.hot === 'orange' ? 'hot orange' : 'hot';
+                 el.insertBefore(em, caret); node = document.createTextNode(''); em.appendChild(node); }
       else { node = document.createTextNode(''); el.insertBefore(node, caret); }
     } else node.textContent += ch;
   }, 34);
@@ -373,27 +513,35 @@ function speak(slide, onend) {
 
 function show(n) {
   if (n < 0 || n >= slides.length) return;
-  clearTimeout(autoTimer); clearInterval(typeTimer); synth.cancel();
+  clearTimeout(autoTimer); clearTimeout(swapTimer); clearInterval(typeTimer); synth.cancel();
   if (cur >= 0) {
     slides[cur].classList.remove('active');
     slides[cur].querySelectorAll('video').forEach(v => v.pause());
-    const m = slides[cur].querySelector('#morph, .morph'); if (m) m.classList.remove('go');
+    const m = slides[cur].querySelector('.morph'); if (m) m.classList.remove('go');
   }
   cur = n;
   const s = slides[cur];
   s.classList.add('active');
+  document.body.classList.toggle('onblack', s.classList.contains('black'));
   document.getElementById('count').textContent = (cur + 1) + ' / ' + slides.length;
   document.getElementById('progress').style.width = ((cur + 1) / slides.length * 100) + '%';
 
-  /* videos: lazy-load, show placeholder if the file isn't there yet */
-  s.querySelectorAll('.vslot').forEach(slot => {
-    const v = slot.querySelector('video');
-    if (!v.src) {
-      v.src = slot.dataset.src;
-      v.onerror = () => slot.classList.add('no-video');
-      v.onloadeddata = () => slot.classList.remove('no-video');
+  /* background videos: lazy-load, hatched placeholder until the file exists */
+  s.querySelectorAll('.bg').forEach(slot => {
+    const m = slot.querySelector('video, img');
+    if (!m.src) {
+      m.onerror = () => slot.classList.add('no-video');
+      /* Landscape media fills the slide; portrait stays in its right-hand band.
+         Measured from the file so swapping a clip needs no markup change. */
+      const fit = () => {
+        const w = m.videoWidth || m.naturalWidth, h = m.videoHeight || m.naturalHeight;
+        if (w && h) slot.classList.toggle('wide', w >= h);
+        slot.classList.remove('no-video');
+      };
+      m.onloadeddata = fit; m.onload = fit;
+      m.src = slot.dataset.src;
     }
-    v.play().catch(() => {});
+    if (m.tagName === 'VIDEO') { m.currentTime = 0; m.play().catch(() => {}); }
   });
 
   const tw = s.querySelector('.tw[data-type]');
@@ -401,6 +549,19 @@ function show(n) {
   const morph = s.querySelector('.morph');
   if (morph) setTimeout(() => morph.classList.add('go'), 1200);
   if (s.dataset.alarm) setTimeout(alarm, 2500);
+
+  /* Long slides swap their caption instead of holding one line the whole time.
+     data-swap overrides the delay in seconds; the default is 55 % in. */
+  s.classList.remove('swapped');
+  const sw = s.querySelector('.tw.swap2');
+  if (sw) {
+    if (sw.dataset.type) sw.textContent = '';   // clear last visit's text
+    const at = (parseFloat(s.dataset.swap) || (parseFloat(s.dataset.dur) || 9) * 0.55) * 1000;
+    swapTimer = setTimeout(() => {
+      s.classList.add('swapped');
+      if (sw.dataset.type) typewrite(sw);
+    }, at);
+  }
 
   /* advance: narration end (if audio) or scripted duration */
   const dur = (parseFloat(s.dataset.dur) || 6) * 1000;
@@ -414,10 +575,10 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft') { autoOn = false; syncPills(); show(cur - 1); }
   else if (e.key.toLowerCase() === 'a') { audioOn = !audioOn; syncPills(); if (!audioOn) synth.cancel(); else speak(slides[cur], autoOn ? () => show(cur + 1) : null); }
   else if (e.key.toLowerCase() === 'p') { autoOn = !autoOn; syncPills(); if (autoOn) show(cur); }
+  else if (e.key.toLowerCase() === 'h') { document.body.classList.toggle('clean'); }
   else if (e.key.toLowerCase() === 'f') {
     if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
   } else if (e.key === 'Home') show(0);
-  else return;
 });
 document.addEventListener('click', () => { if (cur < slides.length - 1 && !autoOn) show(cur + 1); });
 
@@ -427,6 +588,14 @@ function syncPills() {
   document.getElementById('pill-auto').classList.toggle('on', autoOn);
   document.getElementById('pill-auto').innerHTML = '<b>P</b> autoplay: ' + (autoOn ? 'on' : 'off');
 }
+/* Boot flags, so a recording run is deterministic without key presses:
+   ?autoplay=1 starts advancing immediately, ?audio=1 narrates, ?clean=1 hides
+   the HUD pills. record.sh opens the deck with all three. */
+const q = new URLSearchParams(location.search);
+if (q.get('autoplay') === '1') autoOn = true;
+if (q.get('audio') === '1') audioOn = true;
+if (q.get('clean') === '1') document.body.classList.add('clean');
+syncPills();
 show(Math.min(slides.length - 1, Math.max(0, parseInt(location.hash.slice(1), 10) || 0)));
 </script>
 </body>

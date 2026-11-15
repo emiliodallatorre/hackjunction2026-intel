@@ -1,13 +1,45 @@
-# Team Sfogliatelle — π cotta
+<div align="center">
+
+# 🥐 Team Sfogliatelle — π cotta
+
+**A LEGO brick inspection and sorting robot that runs entirely on one Intel laptop.**
+
+[![Policy](https://img.shields.io/badge/policy-%CF%800.5%20VLA-6366f1?style=flat-square)](#the-policy-%CF%8005)
+[![Anomalies](https://img.shields.io/badge/anomalies-PatchCore-8b5cf6?style=flat-square)](#the-anomaly-detector-patchcore-on-good-bricks-only)
+[![Runtime](https://img.shields.io/badge/runtime-OpenVINO-0068b5?style=flat-square)](#5-intel-hardware-what-runs-where-and-why)
+[![Silicon](https://img.shields.io/badge/silicon-Core%20Ultra%20X9%20388H-0068b5?style=flat-square)](#5-intel-hardware-what-runs-where-and-why)
+[![Trained on](https://img.shields.io/badge/trained%20on-Modal%20B200-10b981?style=flat-square)](#heating-the-system-modal-b200s-and-35-training-jobs)
+[![Episodes](https://img.shields.io/badge/dataset-316%20episodes-f59e0b?style=flat-square)](#datasets-316-teleoperated-episodes)
+
+### ▶️ [Watch the demo](https://youtu.be/i87zoaiSM1U)
 
 [![Watch the demo](https://img.youtube.com/vi/i87zoaiSM1U/maxresdefault.jpg)](https://youtu.be/i87zoaiSM1U)
 
-*▶️ [Watch the full demo on YouTube](https://youtu.be/i87zoaiSM1U)*
+</div>
 
-An SO-101 robot arm inspects Lego Duplo bricks and sorts them into two dishes: good bricks go in
-the yellow one, defective bricks in the orange one. The policy that moves the arm, the model that
-spots defects, and the operator dashboard all run locally on one Intel Core Ultra X9 388H laptop —
-no cloud inference anywhere in the loop.
+---
+
+An **SO-101 robot arm** inspects LEGO Duplo bricks and sorts them into two dishes — good bricks to
+the yellow one, defective bricks to the orange one. The policy that moves the arm, the model that
+spots defects, and the operator dashboard all run **locally on one Intel Core Ultra X9 388H
+laptop**. No cloud inference anywhere in the loop.
+
+> **The number the project rests on:** π0.5 produces an action chunk in **105 ms on the iGPU** and
+> **8 104 ms on the CPU**. The control loop needs one every 1 670 ms — so the iGPU uses 6.4 % of the
+> budget while the CPU is 4.9× over it. That 77× gap is the difference between a working demo and a
+> stalled arm. [Full numbers ↓](#5-intel-hardware-what-runs-where-and-why)
+
+### Contents
+
+| | Section | |
+|---|---|---|
+| 1 | [**What we do**](#1-what-we-do) | The three-stage cycle, demo clips, and what the model does that nobody taught it |
+| 2 | [**Training and datasets**](#2-training-and-datasets) | 316 episodes, π0.5, PatchCore, and 35 Modal jobs |
+| 3 | [**Code structure**](#3-where-the-code-is-and-how-it-is-structured) | Four packages and why their dependencies conflict |
+| 4 | [**Physical AI integration**](#4-physical-ai-integration) | The `physicalai` library and the one patch we needed |
+| 5 | [**Intel hardware**](#5-intel-hardware-what-runs-where-and-why) | Every benchmark number, CPU vs iGPU vs NPU |
+| 6 | [**Operator dashboard**](#6-operator-dashboard) | The NiceGUI control panel |
+| 7 | [**Running it**](#7-running-it) | Dry run, robot execution, configuration, tests |
 
 ---
 
@@ -25,14 +57,24 @@ instruction given to it changes.
 After placing, the arm interpolates back to the pose it held before the first cycle, so the next
 presentation does not start over the previous dish. Then it loops.
 
+<details>
+<summary><b>📹 Demo clips</b> — six recordings in <code>videos/</code></summary>
+
+<br>
+
 | Clip | What it shows |
 |---|---|
-| [`videos/01-intro.mp4`](videos/01-intro.mp4) | The arm and the inspection camera |
-| [`videos/02-pick.mp4`](videos/02-pick.mp4) | Picking a brick up |
-| [`videos/02-place.mp4`](videos/02-place.mp4) | Placing it in the yellow dish |
-| [`videos/03-orange-tray.mp4`](videos/03-orange-tray.mp4) | The orange dish, where defective bricks go |
-| [`videos/04-full-run.mp4`](videos/04-full-run.mp4) | A full uncut run, with a plush unicorn as a distractor and bricks scattered everywhere |
-| [`videos/06-training.mp4`](videos/06-training.mp4) | Physical AI Studio: cameras, recorded episodes, the training run |
+| [`01-intro.mp4`](videos/01-intro.mp4) | The arm and the inspection camera |
+| [`02-pick.mp4`](videos/02-pick.mp4) | Picking a brick up |
+| [`02-place.mp4`](videos/02-place.mp4) | Placing it in the yellow dish |
+| [`03-orange-tray.mp4`](videos/03-orange-tray.mp4) | The orange dish, where defective bricks go |
+| [`04-full-run.mp4`](videos/04-full-run.mp4) | **A full uncut run** — plush unicorn distractor, bricks scattered everywhere |
+| [`06-training.mp4`](videos/06-training.mp4) | Physical AI Studio: cameras, recorded episodes, the training run |
+
+GitHub cannot play repo-local `.mp4` files inline, so these are download links. The
+[YouTube demo](https://youtu.be/i87zoaiSM1U) is the one that plays in the browser.
+
+</details>
 
 
 ![RGB feed beside the anomaly heatmap](videos/05-anomaly-sidebyside.png)
@@ -45,6 +87,47 @@ The three task instructions live at the top of
 [`sorting.py`](src/hackjunction2026_intel/sorting.py) and must match the wording used when
 labelling the demonstration dataset. Changing the dataset means changing those strings.
 
+### Generalization: the behaviours nobody demonstrated
+
+The 316 training episodes carry exactly **five** task labels, and every one of them is a nominal
+description of the job going right:
+
+```
+192  Move any brick to the center
+ 47  Move the brick to the yellow dish
+ 47  Move the brick to the orange dish
+ 18  Move the brick to the yellow plate
+ 12  Move the brick to the orange plate
+```
+
+There is no `recover the fallen brick`, no `try again`, no `pick from a pile`, no demonstration of
+anything going wrong. Every episode is a teleoperator doing the task cleanly from a roughly
+canonical starting layout. Despite that, π0.5 does several things at runtime that appear nowhere in
+its demonstrations:
+
+| Observed behaviour | Why it is out of distribution |
+|---|---|
+| **Picks from unseen positions** | Bricks placed outside the demonstrated start region still get picked. The policy was never shown those coordinates. |
+| **Recovers a dropped brick** | If a brick falls or is knocked over mid-transport, the arm re-approaches and re-grasps it. There is not one `fallen → retake` episode — the training data contains no failures to imitate, so this cannot be a memorised recovery routine. |
+| **Starts mid-task from an unseen pose** | Given `Move the brick to the yellow dish` while already holding a brick off-trajectory — say, over to the left — it goes straight to the dish instead of replaying the demonstrated path from its start. |
+| **Selects from clutter** | With many bricks in frame it picks one and commits. Every demonstration had a single brick — `Single block to the center` is the literal name of the 170-episode dataset. |
+| **Ignores distractors** | A plush unicorn dropped into the workspace does not derail it. Visible in [`04-full-run.mp4`](videos/04-full-run.mp4), one uncut take. |
+
+This is the practical argument for a VLA over a scripted pick-and-place. A hand-coded routine needs
+an explicit branch for "brick fell over", and a behaviour-cloning policy trained only on clean runs
+would be expected to go off-distribution and stall. What the pretrained π0.5 backbone contributes is
+the prior that makes "the brick is over there and I should grasp it" transfer to positions and
+recoveries the fine-tune never covered — the 316 episodes teach *this* task on *this* arm, not every
+situation it has to survive.
+
+> [!NOTE]
+> **Two honest caveats.** These are **observed behaviours from live runs, not a measured success rate** —
+> we have no held-out generalization benchmark, no trial counts, and no failure tally, so "it
+> recovers dropped bricks" means we watched it do so, not that it does so reliably. And the anomaly
+> detector generalizes in the *opposite* direction by design: PatchCore flags anything unfamiliar,
+> so the pinned camera settings in [`config.yaml`](anomaly_detection/config.yaml) exist precisely to
+> stop it treating a lighting change as a defect.
+
 ## 2. Training and datasets
 
 ### Datasets: 316 teleoperated episodes
@@ -55,8 +138,8 @@ instruction it demonstrates. Counts are live from the Studio API
 (`GET /api/dataset/{id}/episodes`):
 
 | Dataset | Episodes | Notes |
-|---|---|---|
-| `merged-dataset` | **316** | What the final policy trains on — everything below, merged |
+|---|---:|---|
+| **`merged-dataset`** | **316** | ⬅ what the final policy trains on — everything below, merged |
 | `Single block to the center` | 170 | 101 present · 34 yellow · 35 orange |
 | `Main-moves-relabeled` | 146 | 91 present · 31 yellow · 24 orange |
 | `Main moves` | 76 | The original take, before relabelling |
@@ -108,8 +191,13 @@ Submitting to the B200 has one non-obvious requirement, documented in the launch
 because Studio's GPU enum does not contain `B200` — the trainer pins the hardware itself. Asking
 for `modal_gpu: "B200"` on the generic Modal trainer is rejected.
 
-**What actually happened is worth recording honestly.** Of 35 jobs, 8 completed. The π0.5 runs on
-B200 did not:
+**What actually happened is worth recording honestly: of 35 jobs, 8 completed.** Every π0.5 run on
+the B200 failed or was canceled.
+
+<details>
+<summary><b>The six B200 π0.5 attempts, and how each died</b></summary>
+
+<br>
 
 | Attempt | GPU | Reached | Outcome |
 |---|---|---|---|
@@ -119,6 +207,8 @@ B200 did not:
 | π0.5 · Single block · "Ricotta" | B200 | **95 %** | Canceled after 151 min |
 | π0.5 · merged-dataset | B200 | 10 % | Canceled |
 | π0.5 · merged-dataset (retry) | B200 | 10 % | Canceled |
+
+</details>
 
 Two separate runs reached 95 %, trained for over two hours of B200 time, and then lost the model on
 the way home: Studio's "Downloading trained model from Modal" step could not resolve Modal's storage
@@ -131,11 +221,14 @@ The run that produces the final policy is **`Pi0.5 - final`** — `merged-datase
 size 16, on an **H100** rather than a B200, after the B200 attempts kept losing their results at the
 download step.
 
-> **Status at the time of writing:** `Pi0.5 - final` is still *running* at 46 %, and no π0.5 job has
-> completed yet — the trained-models list holds SmolVLA and ACT exports only. The π0.5 inference
-> numbers in section 5 are measured against a real exported π0.5 OpenVINO IR on the target hardware;
-> the policy driving the arm in the demo videos is the best available export at record time. Check
-> `GET /api/jobs` for the current state before citing this section.
+> [!WARNING]
+> **Status at the time of writing:** `Pi0.5 - final` is still *running* at 46 %, and Studio's
+> trained-models list holds only SmolVLA and ACT exports — no π0.5 job has ever reached `completed`.
+> A usable π0.5 OpenVINO export nonetheless exists on the robot at
+> `~/Downloads/pi05-ricotta-runtime`: 6 252 MB of weights, a 50×6 action chunk, two camera inputs.
+> That is the export section 5 benchmarks and the one driving the arm, and its name says it came out
+> of the "Ricotta" B200 run that Studio records as canceled at 95 %. The export survived; Studio's
+> bookkeeping of it did not. Check `GET /api/jobs` for the current state before citing this section.
 
 ### The anomaly detector: PatchCore on good bricks only
 
@@ -285,64 +378,186 @@ to be closed before `brick-ad` can see the camera at all.
 
 ## 5. Intel hardware: what runs where, and why
 
-The whole stack targets one chip — an **Intel Core Ultra X9 388H** (Panther Lake) with a **B390
-iGPU** and an **NPU**. Both models are OpenVINO IR, so the device is one string, and the interesting
-question is which engine each model belongs on. All numbers below are measured, from
-[`benchmark/results/`](benchmark/results).
+The whole stack targets one chip — an **Intel Core Ultra X9 388H** (Panther Lake, 16 cores) with a
+**B390 iGPU** and an **NPU**. Both models are OpenVINO IR, so picking an engine is one string, and
+the interesting question is which model belongs where. Everything below is measured; nothing is
+estimated.
 
-### π0.5 — the iGPU is the only option
+### The four benchmark runs
 
-p50 latency per action chunk, from `benchmark/results/vla_*_summary.csv`:
+| Run file | Model | Weights | Chunk | Devices | Host | Iters / sustain |
+|---|---|---|---|---|---|---|
+| [`result_20261115_000405`](benchmark/results/result_20261115_000405.json) | PatchCore | — | — | CPU · iGPU · NPU | Core Ultra X9 388H | 9 buckets |
+| [`vla_20261115_055046`](benchmark/results/vla_20261115_055046.json) | **π0.5** (`pi05.xml`) | **6 252 MB** | 50 actions | iGPU · CPU | Core Ultra X9 388H | 60 iters / 300 s |
+| [`vla_20261115_062310`](benchmark/results/vla_20261115_062310.json) | ACT (`act.xml`) | 137 MB | 100 actions | iGPU · CPU · NPU | Core Ultra X9 388H | 60 iters / 300 s |
+| [`vla_20261115_054300`](benchmark/results/vla_20261115_054300.json) | ACT (`act.xml`) | 137 MB | 100 actions | iGPU only | i7-12700H (comparison) | 20 iters / 25 s |
 
-| Device | p50 | p99 | Actions/s | Energy/inference | Real-time at 30 Hz? |
-|---|---|---|---|---|---|
-| **iGPU** (fp16) | **105 ms** | 107 ms | 476 | 4 186 mJ | **yes** — 6.4 % of the budget |
-| CPU (fp32) | 8 104 ms | 8 126 ms | 6.2 | 237 786 mJ | **no** |
+All four ran OpenVINO `2026.4.1`, Python 3.13, on AC power with `cpu_governor: powersave` and
+`energy_perf_pref: performance`. The π0.5 run used the export at
+`~/Downloads/pi05-ricotta-runtime` — the "Ricotta" B200 run from section 2. Its inputs are a 6-DOF
+state vector plus two cameras (RealSense RGB at 3×720×1280 and a gripper cam at 3×600×800); it
+outputs a 50×6 action chunk.
 
-A 30 Hz control loop with a 50-action chunk has to produce one chunk every 1.67 s. The iGPU takes
-105 ms, which is 6.4 % of that budget and leaves a control ceiling of 468 Hz. The CPU takes 8.1 s —
-**4.9× over** the budget — so the action queue empties before the next chunk arrives and the arm
-stalls between motions. The highest control rate the CPU can sustain is 6.2 Hz. That is not a
-"the iGPU is nicer" result; it is the difference between the demo existing and not existing. The
-iGPU is also **57× more energy-efficient per inference** (4.2 J vs 238 J), which is what keeps a
-laptop running this for a whole hackathon.
+### Complete results: every device, every metric
 
-For context, the same harness on a much smaller ACT policy shows how much headroom the silicon has:
-2.7 ms p50 on the iGPU (37 000 actions/s, 68 mJ), 5.7 ms on the NPU, 87 ms on the CPU.
+#### π0.5 — the shipped policy
 
-### PatchCore — fast on the iGPU, so we put it on the NPU
+<sub>`vla_20261115_055046_summary.csv` · 6 252 MB weights · 50-action chunk · 60 iters, 300 s sustain</sub>
 
-p50 latency from `benchmark/results/result_*_summary.csv`:
+| Metric | 🟢 iGPU (fp16) | 🔴 CPU (fp32) |
+|---|---|---|
+| p50 latency | **104.95 ms** | 8 103.69 ms |
+| p95 latency | 106.47 ms | 8 118.84 ms |
+| p99 latency | 106.76 ms | 8 126.21 ms |
+| Sequential FPS | 9.508 | 0.123 |
+| Peak FPS | 9.164 | 0.246 |
+| **Actions/s** | **476.4** | 6.2 |
+| Duty cycle at p99 | **6.41 %** | 487.57 % |
+| Max control rate at p99 | **468.3 Hz** | 6.2 Hz |
+| **Real-time at 30 Hz?** | **yes** | **no** |
+| Cold compile | 12 481.8 ms | 6 083.1 ms |
+| Warm compile | 1 398.1 ms | 1 379.8 ms |
+| First inference | 129.1 ms | 8 041.6 ms |
+| **Energy per inference** | **4 185.7 mJ** | 237 786.3 mJ |
+| Sustained drop over 300 s | 27.5 % | 0.3 % |
+| Peak package temp | 70 °C | 98 °C |
 
-| Device | p50 | p99 | Energy/inference | Peak temp | Cold compile |
-|---|---|---|---|---|---|
-| CPU (fp32) | 110 ms | 155 ms | 4 383 mJ | 97 °C | 0.7 s |
-| **iGPU** (fp16) | **54 ms** | 72 ms | **1 711 mJ** | 78 °C | 1.5 s |
-| NPU | 182 ms | 185 ms | 2 535 mJ | 87 °C | 17.1 s |
+#### PatchCore — the anomaly detector
 
-The iGPU wins on every metric — 2× faster than the CPU and 2.6× cheaper in energy. We still run
-PatchCore on the **NPU** ([`config.yaml`](anomaly_detection/config.yaml): `inference.device: NPU`),
-and that is the right call: the iGPU is already saturated by π0.5, and the two models run *at the
-same time* while a brick is being presented. PatchCore runs a handful of times per cycle on a brick
-that is being held still, so 182 ms costs nothing — while taking it off the iGPU protects the 105 ms
-number the control loop actually depends on. Putting it on the CPU instead would also be viable at
-110 ms, but at 4 383 mJ and 97 °C it heats the package that the iGPU shares.
+<sub>`result_20261115_000405_summary.csv` · 9 sustain buckets</sub>
 
-The NPU's one real cost is a **17 s cold compile** versus 1.5 s on the iGPU. That is paid once at
-startup, before any motion, so it is invisible during a run.
+| Metric | CPU (fp32) | 🟢 iGPU (fp16) | 🔵 NPU (deployed) |
+|---|---|---|---|
+| p50 latency | 109.97 ms | **54.28 ms** | 182.35 ms |
+| p95 latency | 127.21 ms | 64.47 ms | 183.07 ms |
+| p99 latency | 154.91 ms | 72.06 ms | 185.39 ms |
+| Sequential FPS | 8.86 | **18.0** | 5.48 |
+| Peak FPS | 9.71 | 17.04 | 5.51 |
+| Cold compile | 657.5 ms | 1 483.8 ms | **17 089.0 ms** |
+| Warm compile | 106.1 ms | 149.3 ms | **40.1 ms** |
+| First inference | 172.6 ms | **99.9 ms** | 373.7 ms |
+| **Energy per inference** | 4 383.1 mJ | **1 710.8 mJ** | 2 535.1 mJ |
+| Sustained drop | −1.5 % | 4.6 % | −0.1 % |
+| Peak package temp | **97 °C** | 78 °C | 87 °C |
+| End-to-end p50 (incl. pre/post) | 126.04 ms | **91.51 ms** | 184.84 ms |
 
-### Benchmark harness
+<details>
+<summary><b>ACT across all three engines</b> — not the shipped policy, but the only model that ran on CPU, iGPU <i>and</i> NPU</summary>
+
+<br>
+
+<sub>`vla_20261115_062310_summary.csv` · 137 MB weights · 100-action chunk</sub>
+
+| Metric | iGPU (fp16) | CPU (fp32) | NPU |
+|---|---|---|---|
+| p50 latency | **2.70 ms** | 86.91 ms | 5.69 ms |
+| p95 latency | 2.79 ms | 104.50 ms | 6.36 ms |
+| p99 latency | 3.05 ms | 120.61 ms | 6.61 ms |
+| Sequential FPS | **367.4** | 11.2 | 173.8 |
+| Peak FPS | 356.6 | 21.3 | 216.2 |
+| **Actions/s** | **37 003.4** | 1 150.6 | 17 588.2 |
+| Duty cycle at p99 | 0.09 % | 3.62 % | 0.20 % |
+| Max control rate at p99 | 32 837 Hz | 829.2 Hz | 15 132 Hz |
+| Real-time at 30 Hz? | yes | yes | yes |
+| Cold compile | 3 263.3 ms | **613.3 ms** | 1 649.9 ms |
+| Warm compile | 255.3 ms | 181.9 ms | **36.3 ms** |
+| First inference | 6.6 ms | 86.6 ms | 26.1 ms |
+| **Energy per inference** | **68.5 mJ** | 2 667.0 mJ | 157.3 mJ |
+| Sustained drop | 23.7 % | 16.3 % | **−51.8 %** |
+| Peak package temp | 93 °C | 95 °C | **73 °C** |
+
+</details>
+
+**Cross-platform check** — the same ACT IR on a 12th-gen i7-12700H iGPU
+(`vla_20261115_054300_summary.csv`): 33.0 ms p50, 31.4 FPS, 3 029.9 actions/s, 1.13 % duty, cold
+compile 1 451.3 ms, peak 60 °C. The Panther Lake iGPU runs the identical model at 2.70 ms —
+**12.2× faster** than the two-generations-older part.
+
+### What the numbers mean
+
+**π0.5 on the CPU is not slow, it is non-functional.** A 30 Hz control loop consuming 50-action
+chunks needs one chunk every 1.67 s. The iGPU delivers one in 105 ms — 6.4 % of the budget, leaving
+a 468 Hz ceiling. The CPU takes 8.10 s, which is 4.9× *over* budget: the action queue drains, the
+arm finishes its chunk and waits ~6.4 s for the next one. The benchmark's own verdict field says
+`realtime_p99: False`. There is no tuning that closes a 77× gap. The iGPU is also **57× cheaper per
+inference** (4.19 J vs 237.79 J) and peaks 28 °C cooler, which is why a laptop can run this all day.
+
+**The 6 252 MB weights explain the 12.5 s cold compile**, and that is what
+[`PersistentInferenceModel`](src/hackjunction2026_intel/persistent_model.py) exists to avoid paying
+three times per cycle.
+
+**PatchCore's iGPU win is real but unusable.** 54 ms beats the CPU's 110 ms and the NPU's 182 ms, at
+the lowest energy (1.71 J) and temperature (78 °C) of the three. We still run it on the **NPU**
+([`config.yaml`](anomaly_detection/config.yaml): `inference.device: NPU`), because the iGPU is
+already committed to π0.5 and both models are live simultaneously while a brick is presented.
+PatchCore runs a few times per cycle on a brick held still, so 182 ms is free — and moving it off
+the iGPU protects the 105 ms the control loop depends on. The CPU alternative at 110 ms would work
+too, but at 4.38 J and **97 °C** it heats the package the iGPU shares, which costs the policy
+latency indirectly.
+
+**The NPU's price is cold compile: 17.1 s**, 11× the iGPU's 1.48 s. Paid once at startup before any
+motion, so invisible at runtime. Its warm compile is the fastest of the three (40 ms).
+
+**Thermals and sustained load** (`*_sustained.csv`, 10 s buckets):
+
+- π0.5 on the iGPU drops **27.5 %** over 300 s — 9.51 FPS in the first bucket, 6.90 in the last, package 77 → 72 °C. Real throttling, and still 7× the required rate.
+- PatchCore is flat on every device (−1.5 %, 4.6 %, −0.1 %): too short per inference to heat anything.
+- The NPU's **−51.8 %** "drop" on ACT is a speed-*up*: 165 FPS first bucket, 250 last, as its clocks ramp. Negative values in this column mean the last bucket beat the first.
+- The CPU pins at 97–98 °C under both VLA loads and stays there.
+
+### Plots
+
+The two figures the hardware choice rests on:
+
+![π0.5 device comparison](benchmark/results/plots_vla_20261115_055046/device_comparison.png)
+
+<div align="center"><sub><b>π0.5, iGPU vs CPU.</b> The gap is the whole argument for the iGPU.</sub></div>
+
+<br>
+
+![PatchCore across all three engines](benchmark/results/plots_result_20261115_000405/device_comparison.png)
+
+<div align="center"><sub><b>PatchCore on CPU, iGPU and NPU.</b> The iGPU wins — we deploy on the NPU anyway, see below.</sub></div>
+
+<details>
+<summary><b>📊 All 18 figures</b> — six per run, written by <code>plot_benchmark.py</code></summary>
+
+<br>
+
+| Figure | `plots_result_…` (PatchCore) | `plots_vla_…055046` (π0.5) | `plots_vla_…062310` (ACT) |
+|---|---|---|---|
+| Latency distribution | [png](benchmark/results/plots_result_20261115_000405/latency_distribution.png) | [png](benchmark/results/plots_vla_20261115_055046/latency_distribution.png) | [png](benchmark/results/plots_vla_20261115_062310/latency_distribution.png) |
+| Latency over time | [png](benchmark/results/plots_result_20261115_000405/latency_over_time.png) | [png](benchmark/results/plots_vla_20261115_055046/latency_over_time.png) | [png](benchmark/results/plots_vla_20261115_062310/latency_over_time.png) |
+| Power & temperature | [png](benchmark/results/plots_result_20261115_000405/power_temperature.png) | [png](benchmark/results/plots_vla_20261115_055046/power_temperature.png) | [png](benchmark/results/plots_vla_20261115_062310/power_temperature.png) |
+| Sustained throughput | [png](benchmark/results/plots_result_20261115_000405/sustained_throughput.png) | [png](benchmark/results/plots_vla_20261115_055046/sustained_throughput.png) | [png](benchmark/results/plots_vla_20261115_062310/sustained_throughput.png) |
+| Cold start | [png](benchmark/results/plots_result_20261115_000405/cold_start.png) | [png](benchmark/results/plots_vla_20261115_055046/cold_start.png) | [png](benchmark/results/plots_vla_20261115_062310/cold_start.png) |
+| Device comparison | [png](benchmark/results/plots_result_20261115_000405/device_comparison.png) | [png](benchmark/results/plots_vla_20261115_055046/device_comparison.png) | [png](benchmark/results/plots_vla_20261115_062310/device_comparison.png) |
+
+</details>
+
+### Raw data layout
+
+Every run writes five files. The CSVs are what the tables above are built from:
+
+| File | Rows | Contents |
+|---|---|---|
+| `*_summary.csv` | one per device | Every metric in the tables above |
+| `*_latencies.csv` | one per inference | Individual timings, for the distribution plots |
+| `*_sustained.csv` | 10 s buckets | FPS, p50, p99, package and GPU temp over the sustain window |
+| `*_traces.csv` | ~13 700 samples | Power, temperature and clock sampled throughout |
+| `*.json` | — | Everything plus full environment, sensor, memory and model metadata |
+
+### Reproducing
 
 ```bash
-./benchmark/run_benchmark.sh --all --plot     # PatchCore: cpu + igpu + npu, with graphs
-./benchmark/run_vla_benchmark.sh              # π0.5 / ACT across devices
+./benchmark/run_benchmark.sh --all --plot      # PatchCore: cpu + igpu + npu, with graphs
+./benchmark/run_benchmark.sh --quick           # ~1 min sanity check
+./benchmark/run_vla_benchmark.sh               # π0.5 / ACT across devices
 ```
 
-It reports p50/p95/p99 latency, sequential and peak throughput, cold and warm compile time,
-first-inference time, **package energy per inference via RAPL** (`--sudo`), sustained-throughput
-drop under load, and peak package and GPU temperature — then a real-time verdict against the 30 Hz
-control budget. Device setup for Panther Lake (`render`/`video` groups, `intel-opencl-icd`, and the
-NPU driver `.deb`s that are not in the Ubuntu repos) is documented in
+`--sudo` enables RAPL package-energy measurement; without it the `mj_per_inference` column is empty.
+Panther Lake device setup — `render`/`video` group membership, `intel-opencl-icd` for the iGPU, and
+the NPU driver `.deb`s that are not in the Ubuntu repos — is in
 [`benchmark/README.md`](benchmark/README.md).
 
 ## 6. Operator dashboard
@@ -452,3 +667,14 @@ Run the hardware-free tests from a Python environment using the standard library
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
+
+---
+
+<div align="center">
+
+**Team Sfogliatelle** · Junction 2026 · built on
+[Intel Physical AI Studio](https://github.com/openvinotoolkit/physicalai) + OpenVINO
+
+<sub>π0.5 · PatchCore · SO-101 · Core Ultra X9 388H</sub>
+
+</div>

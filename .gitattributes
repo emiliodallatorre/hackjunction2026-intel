@@ -1,3 +1,5 @@
 anomaly_detection/models/*/*.bin filter=lfs diff=lfs merge=lfs -text
 anomaly_detection/models/*/*.xml filter=lfs diff=lfs merge=lfs -text
 anomaly_detection/models/*/*.png filter=lfs diff=lfs merge=lfs -text
+videos/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+videos/*.mp4 filter=lfs diff=lfs merge=lfs -text
