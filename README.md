@@ -48,6 +48,14 @@ The script opens the inspection camera and anomaly model (`InspectionStation`, s
 
 The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): without it the model never reports `EMPTY`, so the cycle aborts before moving. The config comes from `$BRICK_AD_CONFIG`, else `anomaly_detection/config.yaml`, with the model at `anomaly_detection/models/patchcore/`. The model is versioned with Git LFS: run `git lfs install` before cloning, or `git lfs pull` afterwards. [docker-compose.yml](infra/docker-compose.yml) mounts both into the Studio container at `/brick` and sets `BRICK_AD_CONFIG`.
 
+### Remote inspection demo
+
+From the Mac, [run-inspection-demo.sh](scripts/run-inspection-demo.sh) connects to roberta and runs only the presentation and inspection stages. It uses `~/Downloads/pi05-ricotta-runtime` on roberta by default and saves the report to `~/Downloads/inspection.png`. Set `ROBERTA_HOST` or `EXPORT` to override the host or a directory/zip under roberta's Downloads; pass `--present-timeout` to override the default 45 seconds.
+
+For the full presentation, inspection, and dish placement cycle, run [run-sorting.sh](scripts/run-sorting.sh) from the Mac. It uses the same host and export defaults and sets the presentation timeout to 45 seconds; the selected placement runs for 45 control seconds without verifying completion. `scripts/run-sorting.sh --dry-run` logs random routing without connecting to hardware.
+
+Both scripts command the robot during a normal run. Before running them, stop competing Studio sessions, put the brick at its demonstrated starting position, clear the inspection area, and supervise the arm.
+
 ### Configuration
 
 The task instructions in [sorting.py](src/hackjunction2026_intel/sorting.py) match the relabelled demonstration dataset:
