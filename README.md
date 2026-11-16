@@ -2,7 +2,7 @@
 
 # Ricotta Pi
 
-**Second place in the [Intel Physical AI Challenge](guidelines/CHALLENGE.md) at [Junction 2026](https://hackjunction.app/hackathons/junction-2026)**
+**Second place in the** [**Intel Physical AI Challenge**](guidelines/CHALLENGE.md) **at** [**Junction 2026**](https://hackjunction.app/hackathons/junction-2026)
 
 Team Sfogliatelle
 
@@ -96,10 +96,7 @@ hardware-free simulation mode.
 
 ## Team
 
-Ricotta Pi was developed by **Team Sfogliatelle**:
-[Emilio Dalla Torre](https://github.com/emiliodallatorre),
-[Dennis Orlando](https://github.com/dennisorlando), and
-[Chiara Marangoni](https://github.com/chiamara02).
+Ricotta Pi was developed by **Team Sfogliatelle**: [Emilio Dalla Torre](https://github.com/emiliodallatorre), [Chiara Marangoni](https://github.com/chiamara02), and [Dennis Orlando](https://github.com/dennisorlando).
 
 ![Team Sfogliatelle with the second-place award at Junction 2026](docs/images/winners.jpeg)
 
