@@ -35,13 +35,13 @@ Inspection camera settings and the region of interest are defined in
 
 | Path | Purpose |
 |---|---|
-| [`src/hackjunction2026_intel/`](../src/hackjunction2026_intel/) | Robot control, policy runtime, and inspection inference |
-| [`anomaly_detection/`](../anomaly_detection/) | Camera calibration, image collection, PatchCore training, and exported models |
-| [`operator_gui/`](../operator_gui/) | NiceGUI dashboard and simulated operation |
-| [`benchmark/`](../benchmark/) | Model benchmarking scripts, measurements, and plots |
-| [`.github/skills/`](../.github/skills/) | Physical AI Studio resource inspection and training automation |
-| [`infra/`](../infra/) | Physical AI Studio container configuration |
-| [`videos/`](../videos/) | Demonstration recordings and presentation materials |
+| [`src/hackjunction2026_intel/`](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/src/hackjunction2026_intel/) | Robot control, policy runtime, and inspection inference |
+| [`anomaly_detection/`](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/anomaly_detection/) | Camera calibration, image collection, PatchCore training, and exported models |
+| [`operator_gui/`](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/operator_gui/) | NiceGUI dashboard and simulated operation |
+| [`benchmark/`](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/benchmark/) | Model benchmarking scripts, measurements, and plots |
+| [`.github/skills/`](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/.github/skills/) | Physical AI Studio resource inspection and training automation |
+| [`infra/`](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/infra/) | Physical AI Studio container configuration |
+| [`videos/`](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/videos/) | Demonstration recordings and presentation materials |
 
 The anomaly-detection training tools and robot runtime use separate Python environments because
 their dependencies conflict. The dashboard operates the robot through `PolicyRunner` and installs

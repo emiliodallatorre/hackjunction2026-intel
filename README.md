@@ -1,4 +1,4 @@
-<div align="center">
+<div align="center" markdown="1">
 
 # Ricotta Pi
 
@@ -31,12 +31,12 @@ demonstration runs, the arm also picked bricks from different positions, selecte
 re-grasped a dropped brick.
 
 <p align="center">
-  <a href="videos/04-full-run.mp4">
+  <a href="https://github.com/emiliodallatorre/hackjunction2026-intel/blob/main/videos/04-full-run.mp4">
     <img src="docs/images/full-run-preview.gif" alt="The robot completing a full sorting run, shown at twice normal speed" width="360">
   </a>
 </p>
 
-<p align="center"><em>A complete sorting run at twice normal speed. <a href="videos/04-full-run.mp4">Watch the full-resolution video</a></em></p>
+<p align="center"><em>A complete sorting run at twice normal speed. <a href="https://github.com/emiliodallatorre/hackjunction2026-intel/blob/main/videos/04-full-run.mp4">Watch the full-resolution video</a></em></p>
 
 ![Inspection camera image beside the PatchCore anomaly heatmap](videos/05-anomaly-sidebyside.png)
 
@@ -54,7 +54,7 @@ fine-tune π0.5 on NVIDIA B200 GPUs through Modal. The demonstrations covered th
 | Place a brick in the orange dish | 59 |
 | **Total** | **316** |
 
-[Watch the dataset recording video](videos/06-training.mp4). The raw demonstrations are not included
+[Watch the dataset recording video](https://github.com/emiliodallatorre/hackjunction2026-intel/blob/main/videos/06-training.mp4). The raw demonstrations are not included
 in this repository.
 
 PatchCore was fitted on **181 images of good bricks**. Anomalib reported image AUROC **1.000** and

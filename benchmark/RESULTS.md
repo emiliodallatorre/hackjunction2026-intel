@@ -33,7 +33,7 @@ theoretical control rate are calculated from the model-only p99 latency.
 
 [π0.5 results: JSON](results/vla_20261115_055046.json) ·
 [summary CSV](results/vla_20261115_055046_summary.csv) ·
-[all plots](results/plots_vla_20261115_055046/)
+[all plots](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/benchmark/results/plots_vla_20261115_055046/)
 
 ## PatchCore
 
@@ -59,7 +59,7 @@ The benchmark used the earlier `patchcore` model; the configured inspection mode
 
 [PatchCore results: JSON](results/result_20261115_000405.json) ·
 [summary CSV](results/result_20261115_000405_summary.csv) ·
-[all plots](results/plots_result_20261115_000405/)
+[all plots](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/benchmark/results/plots_result_20261115_000405/)
 
 ## ACT policy comparison
 
@@ -87,11 +87,11 @@ The same ACT model recorded a median of 33.0 ms on an Intel Core i7-12700H integ
 
 [ACT results: JSON](results/vla_20261115_062310.json) ·
 [summary CSV](results/vla_20261115_062310_summary.csv) ·
-[all plots](results/plots_vla_20261115_062310/) ·
+[all plots](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/benchmark/results/plots_vla_20261115_062310/) ·
 [i7 comparison](results/vla_20261115_054300.json)
 
 ## Data and reproduction
 
-The [`results/`](results/) directory contains JSON, summary and per-inference CSVs, sustained-load
+The [`results/`](https://github.com/emiliodallatorre/hackjunction2026-intel/tree/main/benchmark/results/) directory contains JSON, summary and per-inference CSVs, sustained-load
 measurements, power and temperature traces, and generated plots. The benchmark scripts and device
 setup are documented in the [PatchCore](README.md) and [VLA](README_VLA.md) guides.
