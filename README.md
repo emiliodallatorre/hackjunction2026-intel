@@ -6,6 +6,17 @@
 
 Team Sfogliatelle
 
+[![Award](https://img.shields.io/badge/Junction%202026-2nd%20place%20Intel%20challenge-f5b301?style=flat-square)](https://hackjunction.app/hackathons/junction-2026)
+[![Policy](https://img.shields.io/badge/policy-%CF%800.5%20VLA-6366f1?style=flat-square)](#how-it-works)
+[![Anomalies](https://img.shields.io/badge/anomalies-PatchCore-8b5cf6?style=flat-square)](#how-it-works)
+[![Runtime](https://img.shields.io/badge/runtime-OpenVINO-0068b5?style=flat-square)](#local-inference)
+[![Silicon](https://img.shields.io/badge/silicon-Core%20Ultra%20X9%20388H%20%28iGPU%20%2B%20NPU%29-0068b5?style=flat-square)](#local-inference)
+[![Speedup](https://img.shields.io/badge/iGPU%20vs%20CPU-77%C3%97%20faster-0068b5?style=flat-square)](#local-inference)
+[![Trained on](https://img.shields.io/badge/fine--tuned%20on-NVIDIA%20B200%20via%20Modal-76b900?style=flat-square)](#training-and-data)
+[![Dataset](https://img.shields.io/badge/dataset-316%20demonstrations-f59e0b?style=flat-square)](#training-and-data)
+[![Robot](https://img.shields.io/badge/robot-SO--101-ef4444?style=flat-square)](#how-it-works)
+[![Python](https://img.shields.io/badge/python-3.13-3776ab?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
+
 [![Watch the demonstration](https://img.youtube.com/vi/i87zoaiSM1U/maxresdefault.jpg)](https://youtu.be/i87zoaiSM1U)
 
 [Watch the demonstration](https://youtu.be/i87zoaiSM1U)
