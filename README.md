@@ -30,6 +30,14 @@ The same policy handles presentation and placement using different language inst
 demonstration runs, the arm also picked bricks from different positions, selected from clutter, and
 re-grasped a dropped brick.
 
+<p align="center">
+  <a href="videos/04-full-run.mp4">
+    <img src="docs/images/full-run-preview.gif" alt="The robot completing a full sorting run, shown at twice normal speed" width="360">
+  </a>
+</p>
+
+<p align="center"><em>A complete sorting run at twice normal speed. <a href="videos/04-full-run.mp4">Watch the full-resolution video</a></em></p>
+
 ![Inspection camera image beside the PatchCore anomaly heatmap](videos/05-anomaly-sidebyside.png)
 
 *The inspection camera image and the corresponding anomaly heatmap*
