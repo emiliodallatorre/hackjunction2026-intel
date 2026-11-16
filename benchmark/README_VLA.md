@@ -8,22 +8,25 @@ The sibling of `bench_core.py` (PatchCore), with the same sensors, the same JSON
 
 ## Run it
 
-```bash
-# iGPU, the default — the interesting device for a VLA
-./run_vla_benchmark.sh --export ~/Downloads/pi05-ricotta-runtime
+Set `MODEL_EXPORT` to an extracted Physical AI Studio runtime export directory and run these
+commands from the `benchmark/` directory on the benchmark host:
 
-./run_vla_benchmark.sh --export ~/Downloads/ACT.zip --quick      # ~1 min sanity check
-./run_vla_benchmark.sh --export DIR --devices igpu,cpu --plot    # compare, with graphs
-./run_vla_benchmark.sh --export DIR --sudo                       # RAPL package energy
-./run_vla_benchmark.sh --local --export /tmp/actx                # run here, no ssh
+```bash
+./run_vla_benchmark.sh --local --export "$MODEL_EXPORT" --quick
+./run_vla_benchmark.sh --local --export "$MODEL_EXPORT" --devices igpu,cpu --plot
+./run_vla_benchmark.sh --local --export "$MODEL_EXPORT" --sudo
 ```
 
 `--export` takes the export root (the folder holding `runtime.yaml` and
 `exports/openvino/`), the `exports/openvino` folder itself, or the `.zip` Studio
-downloads — a zip is unpacked on the host, and only the IR is extracted, not the
-600 MB `model.ckpt`. `--device` accepts `cpu`, `igpu` or `npu` (OpenVINO calls
-the iGPU `GPU`). A device that fails prints the specific fix and the run
-continues with the rest.
+downloads. Local runs require an extracted directory. For a remote run, use `--host`
+and `--repo` to specify the benchmark host and its repository checkout; `--export`
+then refers to a path on that host. `--device` accepts `cpu`, `igpu` or `npu`
+(OpenVINO calls the iGPU `GPU`). A device that fails prints the specific fix and
+the run continues with the rest.
+
+The wrapper constructs shell commands with `eval`. Use only trusted export and repository paths:
+shell metacharacters in those paths can execute commands.
 
 NPU is accepted but π0.5 is not expected to compile there; use the iGPU.
 

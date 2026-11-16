@@ -3,14 +3,19 @@
 Performance only — no accuracy. Measures what the silicon does with the exported
 OpenVINO IR in `anomaly_detection/models/patchcore`.
 
+The [recorded results](RESULTS.md) cover PatchCore, π0.5, and ACT. The
+[VLA benchmark guide](README_VLA.md) describes the policy benchmarks.
+
 ## Run it
 
+Set `BENCH_HOST` to the SSH target and `BENCH_REPO` to the absolute path of its repository
+checkout. Run these commands from the `benchmark/` directory:
+
 ```bash
-./run_benchmark.sh --quick              # ~1 min sanity check
-./run_benchmark.sh                      # full CPU run (~12 min)
-./run_benchmark.sh --device igpu        # integrated GPU only
-./run_benchmark.sh --all --plot         # cpu + igpu + npu, with graphs
-./run_benchmark.sh --sudo               # needed for RAPL package energy
+./run_benchmark.sh --host "$BENCH_HOST" --repo "$BENCH_REPO" --quick
+./run_benchmark.sh --host "$BENCH_HOST" --repo "$BENCH_REPO" --device igpu
+./run_benchmark.sh --host "$BENCH_HOST" --repo "$BENCH_REPO" --all --plot
+./run_benchmark.sh --host "$BENCH_HOST" --repo "$BENCH_REPO" --sudo
 ```
 
 `--device` accepts `cpu`, `igpu` or `npu` (OpenVINO calls the iGPU "GPU").
