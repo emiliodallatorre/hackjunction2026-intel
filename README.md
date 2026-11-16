@@ -8,8 +8,8 @@
 [![Anomalies](https://img.shields.io/badge/anomalies-PatchCore-8b5cf6?style=flat-square)](#the-anomaly-detector-patchcore-on-good-bricks-only)
 [![Runtime](https://img.shields.io/badge/runtime-OpenVINO-0068b5?style=flat-square)](#5-intel-hardware-what-runs-where-and-why)
 [![Silicon](https://img.shields.io/badge/silicon-Core%20Ultra%20X9%20388H-0068b5?style=flat-square)](#5-intel-hardware-what-runs-where-and-why)
-[![Trained on](https://img.shields.io/badge/trained%20on-Modal%20B200-10b981?style=flat-square)](#heating-the-system-modal-b200s-and-35-training-jobs)
-[![Episodes](https://img.shields.io/badge/dataset-316%20episodes-f59e0b?style=flat-square)](#datasets-316-teleoperated-episodes)
+[![Trained on](https://img.shields.io/badge/trained%20on-Modal%20B200-10b981?style=flat-square)](#2-training-and-datasets)
+[![Episodes](https://img.shields.io/badge/dataset-316%20episodes-f59e0b?style=flat-square)](#2-training-and-datasets)
 
 ### ▶️ [Watch the demo](https://youtu.be/i87zoaiSM1U)
 
@@ -58,7 +58,7 @@ After placing, the arm interpolates back to the pose it held before the first cy
 presentation does not start over the previous dish. Then it loops.
 
 <details>
-<summary><b>📹 Demo clips</b> — six recordings in <code>videos/</code></summary>
+<summary><b>📹 Demo clips</b> — five recordings in <code>videos/</code></summary>
 
 <br>
 
@@ -69,10 +69,8 @@ presentation does not start over the previous dish. Then it loops.
 | [`02-place.mp4`](videos/02-place.mp4) | Placing it in the yellow dish |
 | [`03-orange-tray.mp4`](videos/03-orange-tray.mp4) | The orange dish, where defective bricks go |
 | [`04-full-run.mp4`](videos/04-full-run.mp4) | **A full uncut run** — plush unicorn distractor, bricks scattered everywhere |
-| [`06-training.mp4`](videos/06-training.mp4) | Physical AI Studio: cameras, recorded episodes, the training run |
 
-GitHub cannot play repo-local `.mp4` files inline, so these are download links. The
-[YouTube demo](https://youtu.be/i87zoaiSM1U) is the one that plays in the browser.
+The [YouTube demo](https://youtu.be/i87zoaiSM1U) shows the complete sorting run.
 
 </details>
 
@@ -143,6 +141,8 @@ the data used to train the policy.
 | Place a defective brick in the orange dish | 59 |
 | **Total** | **316** |
 
+Watch the [video of us recording the robot demonstrations](videos/06-training.mp4) in Physical AI Studio.
+
 We consolidated demonstrations with equivalent task intents and aligned their language labels
 before fine-tuning. Consistent instructions matter for a vision-language-action model because it
 uses the task text as part of its input.
@@ -194,8 +194,6 @@ empty-ROI frames, which takes under 1 ms, and PatchCore only runs if a brick is 
 Training is cheap because PatchCore only extracts features and never backpropagates — a CPU-only
 torch build fits the model in a minute or two. [`modal_train.py`](anomaly_detection/modal_train.py)
 runs the identical `train()` on a Modal T4/L4 when you want it faster.
-
-Studio in action during training: [`videos/06-training.mp4`](videos/06-training.mp4).
 
 ## 3. Where the code is, and how it is structured
 
@@ -319,9 +317,8 @@ estimated.
 | [`vla_20261115_054300`](benchmark/results/vla_20261115_054300.json) | ACT (`act.xml`) | 137 MB | 100 actions | iGPU only | i7-12700H (comparison) | 20 iters / 25 s |
 
 All four ran OpenVINO `2026.4.1`, Python 3.13, on AC power with `cpu_governor: powersave` and
-`energy_perf_pref: performance`. The π0.5 run used the export at
-`~/Downloads/pi05-ricotta-runtime`. Its inputs are a 6-DOF state vector plus two cameras (RealSense
-RGB at 3×720×1280 and a gripper cam at 3×600×800); it outputs a 50×6 action chunk.
+`energy_perf_pref: performance`. The π0.5 model takes a 6-DOF state vector plus two cameras
+(RealSense RGB at 3×720×1280 and a gripper camera at 3×600×800); it outputs a 50×6 action chunk.
 
 ### Complete results: every device, every metric
 
@@ -534,10 +531,12 @@ Install the robot dependencies and run from the project root on the robot host:
 
 ```bash
 uv sync --extra robot
-uv run --extra robot python -m hackjunction2026_intel.sorting --export ~/Downloads/model_openvino.zip
+uv run --extra robot python -m hackjunction2026_intel.sorting --export /path/to/openvino-export.zip
 ```
 
-`--export` takes the zip downloaded from Studio (**Models** → model row → **OpenVINO** card → **Runtime export**) or its extracted folder. To swap models, pass a different export; nothing else changes. Zips are extracted to a temporary folder that is removed afterwards.
+`--export` accepts the OpenVINO runtime export downloaded from Physical AI Studio or its extracted
+folder. Replace the example path with your export location. Zips are extracted to a temporary folder
+that is removed afterwards.
 
 The optional robot dependencies match the runtime revision and SO-101/Studio plugin versions used by the Studio image in [docker-compose.yml](infra/docker-compose.yml).
 
@@ -552,14 +551,6 @@ After the movement is detected, the arm returns to the pose captured before the 
 During placement, the release check logs the initial gripper position, sampled positions and timing, and a summary when the stage ends or is interrupted. These diagnostics use the existing gripper observations and do not change the completion condition.
 
 The anomaly model must include the empty-ROI reference (`brick-ad fit-empty`): without it the model never reports `EMPTY`, so the cycle aborts before moving. The config comes from `$BRICK_AD_CONFIG`, else `anomaly_detection/config.yaml`, with the model chosen by `paths.model` there: `anomaly_detection/models/patchcore-v2/` (current, larger ROI) or `models/patchcore/` (v1). The model is versioned with Git LFS: run `git lfs install` before cloning, or `git lfs pull` afterwards. [docker-compose.yml](infra/docker-compose.yml) mounts both into the Studio container at `/brick` and sets `BRICK_AD_CONFIG`.
-
-### Remote inspection demo
-
-From the Mac, [run-inspection-demo.sh](scripts/run-inspection-demo.sh) connects to roberta and runs only the presentation and inspection stages. Its presence check also waits for the first policy control tick before starting. It uses `~/Downloads/pi05-ricotta-runtime` on roberta by default and saves the report to `~/Downloads/inspection.png`. Set `ROBERTA_HOST` or `EXPORT` to override the host or a directory/zip under roberta's Downloads; pass `--present-timeout` to override the default 45 seconds.
-
-For the full presentation, inspection, and dish placement cycle, run [run-sorting.sh](scripts/run-sorting.sh) from the Mac. It uses the same host and export defaults and sets the presentation and placement timeouts to 45 seconds. Placement stops early when the gripper movement heuristic passes. `scripts/run-sorting.sh --dry-run` logs random routing without connecting to hardware.
-
-Both scripts command the robot during a normal run. Before running them, stop competing Studio sessions, put the brick at its demonstrated starting position, clear the inspection area, and supervise the arm.
 
 ### Configuration
 
