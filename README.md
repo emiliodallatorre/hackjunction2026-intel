@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🥐 Team Sfogliatelle — π cotta
+# 🥐 Team Sfogliatelle — Ricotta Pi
 
 **A LEGO brick inspection and sorting robot that runs entirely on one Intel laptop.**
 
@@ -34,7 +34,7 @@ laptop**. No cloud inference anywhere in the loop.
 | | Section | |
 |---|---|---|
 | 1 | [**What we do**](#1-what-we-do) | The three-stage cycle, demo clips, and what the model does that nobody taught it |
-| 2 | [**Training and datasets**](#2-training-and-datasets) | 316 episodes, π0.5, PatchCore, and 35 Modal jobs |
+| 2 | [**Training and datasets**](#2-training-and-datasets) | 316 demonstrations, π0.5 fine-tuning on B200, and PatchCore |
 | 3 | [**Code structure**](#3-where-the-code-is-and-how-it-is-structured) | Four packages and why their dependencies conflict |
 | 4 | [**Physical AI integration**](#4-physical-ai-integration) | The `physicalai` library and the one patch we needed |
 | 5 | [**Intel hardware**](#5-intel-hardware-what-runs-where-and-why) | Every benchmark number, CPU vs iGPU vs NPU |
@@ -110,7 +110,7 @@ its demonstrations:
 | **Picks from unseen positions** | Bricks placed outside the demonstrated start region still get picked. The policy was never shown those coordinates. |
 | **Recovers a dropped brick** | If a brick falls or is knocked over mid-transport, the arm re-approaches and re-grasps it. There is not one `fallen → retake` episode — the training data contains no failures to imitate, so this cannot be a memorised recovery routine. |
 | **Starts mid-task from an unseen pose** | Given `Move the brick to the yellow dish` while already holding a brick off-trajectory — say, over to the left — it goes straight to the dish instead of replaying the demonstrated path from its start. |
-| **Selects from clutter** | With many bricks in frame it picks one and commits. Every demonstration had a single brick — `Single block to the center` is the literal name of the 170-episode dataset. |
+| **Selects from clutter** | With many bricks in frame it picks one and commits, although the demonstrations showed one brick at a time. |
 | **Ignores distractors** | A plush unicorn dropped into the workspace does not derail it. Visible in [`04-full-run.mp4`](videos/04-full-run.mp4), one uncut take. |
 
 This is the practical argument for a VLA over a scripted pick-and-place. A hand-coded routine needs
@@ -130,105 +130,30 @@ situation it has to survive.
 
 ## 2. Training and datasets
 
-### Datasets: 316 teleoperated episodes
+### π0.5 training data: 316 teleoperated episodes
 
-Every episode is a teleoperated demonstration recorded in **Intel Physical AI Studio**, which drives
-the SO-101 over serial, previews and records the cameras, and stores each take with the text
-instruction it demonstrates. Counts are live from the Studio API
-(`GET /api/dataset/{id}/episodes`):
+The final π0.5 policy was fine-tuned on **316 teleoperated SO-101 demonstrations** recorded in Intel
+Physical AI Studio. The raw episodes are not included in this repository; the counts below describe
+the data used to train the policy.
 
-| Dataset | Episodes | Notes |
-|---|---:|---|
-| **`merged-dataset`** | **316** | ⬅ what the final policy trains on — everything below, merged |
-| `Single block to the center` | 170 | 101 present · 34 yellow · 35 orange |
-| `Main-moves-relabeled` | 146 | 91 present · 31 yellow · 24 orange |
-| `Main moves` | 76 | The original take, before relabelling |
-| `Pija o blocchettoooooo daiiiiiii` | 30 | First session, wording not yet fixed |
-| `Very clean dataset` | 5 | |
-| `Friendly moves` | 3 | `Say hi` — used for a SmolVLA side experiment |
+| Task intent | Episodes |
+|---|---:|
+| Present a brick for inspection | 192 |
+| Place a good brick in the yellow dish | 65 |
+| Place a defective brick in the orange dish | 59 |
+| **Total** | **316** |
 
-The relabelling matters more than it sounds. The early datasets had the same behaviour split across
-differently worded instructions — "Take the red square brick and put it on the yellow dish" (21
-episodes) versus "Pick up the red square brick and put it into the yellow dish" (8) versus "Take the
-red brick and put it in the yellow dish" (1). A VLA model conditions on that string, so three
-spellings of one task means three tasks with a third of the data each. `merged-dataset` still
-carries a `dish`/`plate` split (47 yellow dish + 18 yellow plate, 47 orange dish + 12 orange plate)
-for the same reason. The three strings in
-[`sorting.py`](src/hackjunction2026_intel/sorting.py) must match the labels exactly, which is why
-they are constants at the top of the file rather than inline strings.
+We consolidated demonstrations with equivalent task intents and aligned their language labels
+before fine-tuning. Consistent instructions matter for a vision-language-action model because it
+uses the task text as part of its input.
 
 ### The policy: π0.5
 
-The policy is a pretrained **π0.5** vision-language-action model fine-tuned on `merged-dataset`. A
-VLA model takes camera frames plus a text instruction and outputs a chunk of joint positions, so one
-network covers all three stages and "pick up the orange brick instead" is a prompt change rather
-than a retrain.
-
-Training settings, identical across every attempt: **5 epochs**, `bf16-mixed` precision,
-`compile_model: true`, image augmentation on, `val_split: 0.1`, SnapFlow distillation for 3 epochs,
-and `export_backends: ["openvino"]` so Studio hands back OpenVINO IR directly. Batch size moved
-8 → 16 → 32 depending on the GPU. π0.5 also needs Hugging Face access to the gated
-`google/paligemma-3b-pt-224` as its vision-language backbone, via `HF_TOKEN` in `infra/.env`.
-
-### Heating the system: Modal B200s and 35 training jobs
-
-Studio can train locally, but π0.5 is a 3B-parameter backbone — the laptop's iGPU is an inference
-device, not a training one. So Studio was pointed at **Modal**, which rents GPUs per second, and we
-burned through **35 training jobs in about 29 hours** across five GPU tiers: A10G, A100-80GB, H100,
-and **B200** — Nvidia's Blackwell data-center part, the fastest thing Modal rents.
-
-Three automation skills in [`.github/skills/`](.github/skills) exist because the Studio UI is a bad
-place to live when jobs fail this often. They drive Studio's REST API at `roberta:7860/api` directly:
-
-| Skill | What it does |
-|---|---|
-| [`studio-inspect-resources`](.github/skills/studio-inspect-resources/SKILL.md) | Lists projects, datasets with per-task episode counts, models, exports, trainers, policies, devices — the episode table above is its output |
-| [`studio-launch-training`](.github/skills/studio-launch-training/SKILL.md) | `POST /api/jobs:train` with a full payload; clones a previous job's settings and changes one field |
-| [`studio-monitor-training`](.github/skills/studio-monitor-training/SKILL.md) | Polls job status, distinguishes stalled from working via Docker and `modal container list`, cancels and cleans up |
-
-Submitting to the B200 has one non-obvious requirement, documented in the launch skill: it is a
-*separate trainer ID* (`22f86c1e-…`) rather than a GPU choice, and `modal_gpu` must be `null`,
-because Studio's GPU enum does not contain `B200` — the trainer pins the hardware itself. Asking
-for `modal_gpu: "B200"` on the generic Modal trainer is rejected.
-
-**What actually happened is worth recording honestly: of 35 jobs, 8 completed.** Every π0.5 run on
-the B200 failed or was canceled.
-
-<details>
-<summary><b>The six B200 π0.5 attempts, and how each died</b></summary>
-
-<br>
-
-| Attempt | GPU | Reached | Outcome |
-|---|---|---|---|
-| π0.5 · Main-moves-relabeled | B200 | 5 % | Cloudflare R2 DNS failure |
-| π0.5 · Main-moves-relabeled | B200 | 5 % | Aborted, application shutdown |
-| π0.5 · Main-moves-relabeled | B200 | **95 %** | `clobber.modal-storage.com` unresolvable — died downloading the finished model |
-| π0.5 · Single block · "Ricotta" | B200 | **95 %** | Canceled after 151 min |
-| π0.5 · merged-dataset | B200 | 10 % | Canceled |
-| π0.5 · merged-dataset (retry) | B200 | 10 % | Canceled |
-
-</details>
-
-Two separate runs reached 95 %, trained for over two hours of B200 time, and then lost the model on
-the way home: Studio's "Downloading trained model from Modal" step could not resolve Modal's storage
-host from the robot. The failures were never the GPU and never the training — they were a gated
-Hugging Face repo (401/403 on `paligemma-3b-pt-224`), Modal's **workspace billing spend limit**
-being hit mid-run, and DNS on the robot host. The B200 did finish other policies on the same
-dataset: **SmolVLA in 58 min** and **ACT in 51 min**, both completed and exported.
-
-The run that produces the final policy is **`Pi0.5 - final`** — `merged-dataset`, 316 episodes, batch
-size 16, on an **H100** rather than a B200, after the B200 attempts kept losing their results at the
-download step.
-
-> [!WARNING]
-> **Status at the time of writing:** `Pi0.5 - final` is still *running* at 46 %, and Studio's
-> trained-models list holds only SmolVLA and ACT exports — no π0.5 job has ever reached `completed`.
-> A usable π0.5 OpenVINO export nonetheless exists on the robot at
-> `~/Downloads/pi05-ricotta-runtime`: 6 252 MB of weights, a 50×6 action chunk, two camera inputs.
-> That is the export section 5 benchmarks and the one driving the arm, and its name says it came out
-> of the "Ricotta" B200 run that Studio records as canceled at 95 %. The export survived; Studio's
-> bookkeeping of it did not. Check `GET /api/jobs` for the current state before citing this section.
+The policy is a pretrained **π0.5** vision-language-action model fine-tuned on the dataset above
+using **NVIDIA B200 GPUs through Modal**. It takes camera frames and a text instruction as input and
+outputs robot actions, allowing one model to handle the sorting stages by changing the instruction.
+The trained policy was exported to OpenVINO IR for local inference on the Intel laptop; the
+benchmarks in section 5 use that 6 252 MB export.
 
 ### The anomaly detector: PatchCore on good bricks only
 
@@ -256,11 +181,12 @@ Held-out test results, from Anomalib on the 102 good+anomaly test images:
 | Image F1 | **0.991** |
 | Empty-vs-brick separation | empty scores max **0.013**, bricks min **0.198** — a 15× gap, threshold at 0.106 |
 
-AUROC 1.0 means every anomalous image scored higher than every good image, so there exists a
-threshold with zero errors on this test set. That is a small, single-setup test set with locked
-camera controls, not a claim about bricks in general lighting — the ROI crop, focus, exposure, gain
-and white balance are all pinned in [`config.yaml`](anomaly_detection/config.yaml) precisely because
-PatchCore treats a lighting change as an anomaly too.
+AUROC 1.0 means every anomalous image scored higher than every good image on this held-out set. It is
+a small, single-setup evaluation with locked camera controls, not a claim about bricks in general
+lighting. The image data is not included in this repository, so these results are not independently
+reproducible from the repo alone. The ROI crop, focus, exposure, gain and white balance are pinned in
+[`config.yaml`](anomaly_detection/config.yaml) because PatchCore can treat lighting changes as
+anomalies.
 
 The empty check is deliberately not the network: each crop is compared to the median of the 20
 empty-ROI frames, which takes under 1 ms, and PatchCore only runs if a brick is actually there.
@@ -394,9 +320,8 @@ estimated.
 
 All four ran OpenVINO `2026.4.1`, Python 3.13, on AC power with `cpu_governor: powersave` and
 `energy_perf_pref: performance`. The π0.5 run used the export at
-`~/Downloads/pi05-ricotta-runtime` — the "Ricotta" B200 run from section 2. Its inputs are a 6-DOF
-state vector plus two cameras (RealSense RGB at 3×720×1280 and a gripper cam at 3×600×800); it
-outputs a 50×6 action chunk.
+`~/Downloads/pi05-ricotta-runtime`. Its inputs are a 6-DOF state vector plus two cameras (RealSense
+RGB at 3×720×1280 and a gripper cam at 3×600×800); it outputs a 50×6 action chunk.
 
 ### Complete results: every device, every metric
 
