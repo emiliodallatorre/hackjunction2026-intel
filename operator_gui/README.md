@@ -12,10 +12,11 @@ It is an add-on. It drives [run_model.py](../src/hackjunction2026_intel/run_mode
 
 ## Run
 
-On the robot host, from the repository root:
+On the robot host, set `MODEL_EXPORT` to a Physical AI Studio runtime export ZIP or extracted
+directory, then run from the repository root:
 
 ```bash
-uv run --extra robot --with-editable ./operator_gui operator-gui --export ~/Downloads/model_openvino.zip
+uv run --extra robot --with-editable ./operator_gui operator-gui --export "$MODEL_EXPORT"
 ```
 
 Then open `http://<robot-host>:8080`. It also works over the tailnet.
